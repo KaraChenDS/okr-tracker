@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="description" content="VisOKR：个人 OKR 可视化管理——周期、目标、关键结果、每周检视、趋势图与热力图，支持多设备同步。" />
+<meta name="theme-color" content="#f4f5fb" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#101322" media="(prefers-color-scheme: dark)" />
+<title>VisOKR · 个人 OKR 管理</title>
+<link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+<link rel="manifest" href="manifest.webmanifest" />
+<style>
+/* ============ 主题变量 ============ */
+:root{
+  --bg:#f4f5fb; --card:#ffffff; --card2:#f7f8fd; --ink:#1d2133; --muted:#6b7188;
+  --line:#e3e6f2; --accent:#5b5bd6; --accent2:#8b5cf6; --ok:#2f9e63; --warn:#d98a12; --bad:#d64545;
+  --chipbg:#eef0fb; --shadow:0 2px 10px rgba(40,46,88,.08); --shadow2:0 8px 28px rgba(40,46,88,.16);
+  --radius:16px;
+}
+html[data-theme="dark"]{
+  --bg:#101322; --card:#1a1e30; --card2:#20243a; --ink:#e8eaf6; --muted:#9aa1bd;
+  --line:#2c3150; --accent:#8d8df0; --accent2:#a78bfa; --ok:#4ecb8a; --warn:#e0a94b; --bad:#ef7070;
+  --chipbg:#262b47; --shadow:0 2px 12px rgba(0,0,0,.35); --shadow2:0 8px 28px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink); min-height:100vh;
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
+input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent)}
+
+/* ============ 布局骨架 ============ */
+#topbar{
+  position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--card) 88%,transparent);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:10px;padding:10px 14px;
+  padding-top:calc(10px + env(safe-area-inset-top));
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px;letter-spacing:.5px}
+.brand .logo{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+  display:grid;place-items:center;color:#fff;font-size:13px;font-weight:800}
+#tabs-desk{display:none;gap:2px;margin-left:8px}
+#tabs-desk button{padding:7px 14px;border-radius:10px;font-size:14px;color:var(--muted)}
+#tabs-desk button.on{background:var(--chipbg);color:var(--accent);font-weight:600}
+#topbar .spacer{flex:1}
+.iconbtn{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:16px;color:var(--muted)}
+.iconbtn:hover{background:var(--chipbg)}
+#sync-dot{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);
+  padding:5px 10px;border-radius:999px;background:var(--chipbg);max-width:40vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#sync-dot .dot{width:8px;height:8px;border-radius:50%;flex:none}
+.spin{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+main{max-width:960px;margin:0 auto;padding:16px 14px calc(84px + env(safe-area-inset-bottom))}
+#tabbar{
+  position:fixed;bottom:0;left:0;right:0;z-index:30;display:flex;
+  background:color-mix(in srgb,var(--card) 92%,transparent);backdrop-filter:blur(10px);
+  border-top:1px solid var(--line);padding:6px 10px calc(6px + env(safe-area-inset-bottom));
+}
+#tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;border-radius:12px;font-size:11px;color:var(--muted)}
+#tabbar button .ic{font-size:20px;line-height:1}
+#tabbar button.on{color:var(--accent);font-weight:700}
+@media(min-width:720px){
+  #tabbar{display:none}
+  #tabs-desk{display:flex}
+  main{padding-bottom:40px}
+}
+
+/* ============ 通用卡片 / 控件 ============ */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:14px}
+.card h3{margin:0 0 12px;font-size:15px;display:flex;align-items:center;gap:8px}
+.card h3 .sub{margin-left:auto;font-weight:400;font-size:12px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:560px){.grid2{grid-template-columns:1fr}}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 14px;border-radius:12px;
+  background:var(--chipbg);color:var(--ink);font-size:14px;font-weight:600;transition:.15s}
+.btn:hover{filter:brightness(.96)}
+html[data-theme="dark"] .btn:hover{filter:brightness(1.2)}
+.btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.btn.danger{color:var(--bad)}
+.btn.small{padding:6px 10px;font-size:13px;border-radius:10px}
+.btn:disabled{opacity:.5;cursor:default}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;background:var(--chipbg);color:var(--muted)}
+.chip.ok{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
+.chip.warn{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.chip.bad{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad)}
+.chip.done{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
+input[type=text],input[type=number],input[type=date],input[type=password],select,textarea{
+  width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:11px;background:var(--card2);outline:none;font-size:14px}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:64px}
+label.f{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;font-weight:600}
+.row{display:flex;align-items:center;gap:8px}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.mt8{margin-top:8px}.mt12{margin-top:12px}.mb8{margin-bottom:8px}
+
+/* ============ 进度可视化 ============ */
+.ring{position:relative;display:grid;place-items:center}
+.ring svg{transform:rotate(-90deg)}
+.ring .val{position:absolute;text-align:center;line-height:1.15}
+.ring .val b{font-size:inherit;font-weight:800}
+.bar{height:8px;border-radius:99px;background:var(--chipbg);overflow:hidden;min-width:60px}
+.bar>i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .4s ease}
+.heatcell{width:12px;height:12px;border-radius:4px;background:var(--chipbg)}
+
+/* ============ OKR 看板 ============ */
+.obj-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:14px;position:relative;overflow:hidden}
+.obj-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--oc,var(--accent))}
+.obj-head{display:flex;gap:14px;align-items:center}
+.obj-title{font-size:15.5px;font-weight:700;margin:0 0 3px}
+.obj-desc{font-size:12.5px;color:var(--muted);margin:0}
+.obj-actions{margin-left:auto;display:flex;gap:2px;flex:none}
+.kr-list{margin-top:12px;display:flex;flex-direction:column;gap:10px}
+.kr-row{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:10px 12px;border:1px dashed var(--line);border-radius:12px;background:var(--card2)}
+.kr-name{font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.kr-metrics{grid-column:1/2;display:flex;align-items:center;gap:8px;margin-top:2px}
+.kr-metrics .bar{flex:1}
+.kr-nums{grid-column:2/3;grid-row:1/3;display:flex;align-items:center;gap:6px}
+.kr-nums input[type=number]{width:74px;padding:5px 7px;font-size:13px;text-align:right}
+.kr-pct{font-size:13px;font-weight:800;min-width:44px;text-align:right}
+.kr-type{font-size:10.5px;color:var(--muted);background:var(--chipbg);padding:1px 6px;border-radius:6px}
+.obj-foot{margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* ============ 检视 / 时间线 ============ */
+.tl-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.tl-item:last-child{border-bottom:none}
+.tl-date{flex:none;width:72px;font-size:12px;color:var(--muted);padding-top:2px}
+.tl-body{flex:1;min-width:0}
+.tl-obj{font-size:13px;font-weight:700;margin-bottom:2px}
+.tl-text{font-size:13px;white-space:pre-wrap;word-break:break-word}
+.conf-hi{color:var(--ok)}.conf-mid{color:var(--warn)}.conf-lo{color:var(--bad)}
+
+/* ============ 周期选择 ============ */
+.pills{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;-webkit-overflow-scrolling:touch}
+.pill{flex:none;padding:7px 14px;border-radius:999px;font-size:13px;font-weight:600;background:var(--card);border:1px solid var(--line);color:var(--muted)}
+.pill.on{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-color:transparent}
+
+/* ============ 弹层 ============ */
+#overlay{position:fixed;inset:0;z-index:60;display:none;background:rgba(15,18,35,.5);backdrop-filter:blur(2px);
+  align-items:flex-end;justify-content:center}
+@media(min-width:720px){#overlay{align-items:center}}
+#overlay.open{display:flex}
+.modal{background:var(--card);width:100%;max-width:560px;border-radius:22px 22px 0 0;max-height:86vh;overflow:auto;
+  padding:18px 18px calc(18px + env(safe-area-inset-bottom));box-shadow:var(--shadow2)}
+@media(min-width:720px){.modal{border-radius:20px}}
+.modal h3{margin:0 0 6px;font-size:16px;display:flex;align-items:center}
+.modal h3 .x{margin-left:auto;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:var(--muted)}
+.modal h3 .x:hover{background:var(--chipbg)}
+.color-dots{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
+.cdot{width:26px;height:26px;border-radius:50%;border:2.5px solid transparent}
+.cdot.on{border-color:var(--ink);transform:scale(1.12)}
+.seg{display:flex;gap:6px;margin-top:2px}
+.seg button{flex:1;padding:8px 4px;border-radius:10px;background:var(--chipbg);font-size:13px;color:var(--muted);font-weight:600}
+.seg button.on{background:var(--accent);color:#fff}
+
+/* ============ Toast ============ */
+#toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:90;
+  display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+#toast div{background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:12px;font-size:13px;box-shadow:var(--shadow2);
+  animation:pop .25s ease; max-width:82vw}
+@keyframes pop{from{opacity:0;transform:translateY(8px)}to{opacity:1}}
+.empty{padding:26px 12px;text-align:center;color:var(--muted);font-size:13px}
+.empty .big{font-size:34px;margin-bottom:6px}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:#5b5bd6"/><stop offset="1" style="stop-color:#8b5cf6"/></linearGradient>
+  <linearGradient id="gA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--accent);stop-opacity:.25"/><stop offset="1" style="stop-color:var(--accent);stop-opacity:0"/></linearGradient>
+</defs></svg>
+
+<header id="topbar">
+  <div class="brand"><span class="logo">◎</span> VisOKR</div>
+  <nav id="tabs-desk"></nav>
+  <div class="spacer"></div>
+  <div id="sync-dot" title="同步状态"><span class="dot" style="background:#bbb"></span><span class="txt">检查中…</span></div>
+  <button class="iconbtn" id="btn-sync-now" title="立即同步">⟳</button>
+  <button class="iconbtn" id="btn-theme" title="切换主题">◐</button>
+</header>
+
+<main id="view"></main>
+
+<nav id="tabbar"></nav>
+<div id="overlay"><div class="modal" id="modal"></div></div>
+<div id="toast"></div>
+
+<script>
+/* =============================================================
+   VisOKR · 个人 OKR 可视化管理
+   单文件 PWA · localStorage + GitHub Contents API 多设备同步
+   ============================================================= */
+"use strict";
+
+/* ---------- 小工具 ---------- */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2,9));
+const clamp = (v,a,b) => Math.min(b, Math.max(a, v));
+const now = () => Date.now();
+const dstr = (d) => { const x = d || new Date(); return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); };
+const pdate = s => { if(!s) return null; const p = String(s).split("-").map(Number); return new Date(p[0], p[1]-1, p[2]); };
+const dayDiff = (a,b) => Math.round((b-a)/86400000);
+const fmtNum = v => (Math.round(v*100)/100).toString();
+function ago(ts){ const m = Math.floor((now()-ts)/60000);
+  if(m<1) return "刚刚"; if(m<60) return m+" 分钟前"; const h=Math.floor(m/60);
+  if(h<24) return h+" 小时前"; const d=Math.floor(h/24); return d<30 ? d+" 天前" : new Date(ts).toLocaleDateString("zh-CN"); }
+function toast(msg, ms){ const t=$("#toast"); const d=document.createElement("div"); d.textContent=msg; t.appendChild(d);
+  setTimeout(()=>{d.style.transition="opacity .3s";d.style.opacity="0";setTimeout(()=>d.remove(),320)}, ms||2200); }
+
+const KR_TYPES = {
+  increase: {label:"递增", icon:"↗"},
+  decrease: {label:"递减", icon:"↘"},
+  percent:  {label:"百分比", icon:"%"},
+  bool:     {label:"是否", icon:"✓"},
+};
+const OBJ_COLORS = ["#5b5bd6","#8b5cf6","#2f9e63","#d98a12","#d64545","#0e97b8","#d63384","#5f6b7a"];
+const CONF = {high:{label:"信心高",cls:"conf-hi",txt:"🟢"}, mid:{label:"有信心但受阻",cls:"conf-mid",txt:"🟡"}, low:{label:"风险大",cls:"conf-lo",txt:"🔴"}};
+const CONF2 = {high:{label:"🟢 顺利",cls:"conf-hi"}, mid:{label:"🟡 有阻力",cls:"conf-mid"}, low:{label:"🔴 高危",cls:"conf-lo"}};
+
+/* ---------- 状态模型（扁平 map，便于按 id/时间戳分层合并） ---------- */
+const LS_STATE = "okr_state_v1";
+const LS_UI    = "okr_ui_v1";
+const SY_KEY   = "okr_sync_v1";
+const SYNC_DEFAULTS = { owner:"KaraChenDS", repo:"okr-tracker-data", path:"okr.json" };
+
+function defaultState(){
+  return { v:1, cycles:{}, objectives:{}, krs:{}, checkins:{}, meta:{updatedAt: now()} };
+}
+let S = loadState();
+let UI = loadUI();          // 本机偏好：主题/当前视图/当前周期 —— 不参与同步
+let pendingTimer = null;
+
+function loadState(){
+  try{ const raw = localStorage.getItem(LS_STATE);
+    if(raw){ const j = JSON.parse(raw);
+      if(j && j.v===1 && j.cycles) return j; }
+  }catch(e){}
+  return defaultState();
+}
+function loadUI(){
+  try{ return JSON.parse(localStorage.getItem(LS_UI)) || {}; }catch(e){ return {}; }
+}
+function saveUI(){ try{ localStorage.setItem(LS_UI, JSON.stringify(UI)); }catch(e){} }
+
+function save(opts){
+  S.meta.updatedAt = now();
+  try{ localStorage.setItem(LS_STATE, JSON.stringify(S)); }catch(e){ toast("本地存储失败："+e.message, 3500); }
+  if(!(opts&&opts.noSync)) queuePush();
+  render();
+}
+
+/* ---------- 进度计算 ---------- */
+function krsOf(o){ return Object.values(S.krs).filter(k => k.objId===o.id && !k.deleted); }
+function krProg(k){
+  let p = 0;
+  const c = Number(k.current)||0, s = Number(k.start)||0, t = Number(k.target)||0;
+  if(k.type==="percent")   p = c;
+  else if(k.type==="bool") p = c>=1 ? 100 : 0;
+  else if(k.type==="decrease") p = (s-t)>0 ? (s-c)/(s-t)*100 : (c<=t?100:0);
+  else                     p = (t-s)>0 ? (c-s)/(t-s)*100 : (c>=t?100:0);
+  return clamp(p, 0, 100);
+}
+function oProg(o, snapMap){
+  const krs = krsOf(o);
+  if(!krs.length) return 0;
+  let sum=0, wsum=0;
+  for(const k of krs){
+    const kk = (snapMap && snapMap[k.id]!=null) ? Object.assign({}, k, {current:snapMap[k.id]}) : k;
+    const w = Number(kk.weight)>0 ? Number(kk.weight) : 1;
+    sum += krProg(kk)*w; wsum += w;
+  }
+  return sum/wsum;
+}
+function cycleObjs(cid, inclArchived){
+  return Object.values(S.objectives).filter(o => !o.deleted && o.cycleId===cid && (inclArchived || !o.archived));
+}
+function cycleOverall(cid){
+  const objs = cycleObjs(cid,false);
+  if(!objs.length) return 0;
+  return objs.reduce((a,o)=>a+oProg(o),0)/objs.length;
+}
+function timeProg(c){
+  if(!c) return 0;
+  const st = pdate(c.start), en = pdate(c.end);
+  if(!st||!en) return 0;
+  const t = now();
+  return clamp((t-st)/(en-st||1)*100, 0, 100);
+}
+function lastCheckin(objId){
+  const list = Object.values(S.checkins).filter(x => x.objId===objId && !x.deleted);
+  return list.sort((a,b)=>b.date.localeCompare(a.date))[0] || null;
+}
+function objStatus(o){
+  const c = S.cycles[o.cycleId];
+  const p = oProg(o);
+  if(o.archived) return {label:"已归档", cls:""};
+  if(p>=99.5) return {label:"已完成", cls:"done"};
+  if(!c) return {label:"未知", cls:""};
+  const tp = timeProg(c);
+  if(now() < pdate(c.start)) return {label:"未开始", cls:""};
+  if(tp<=0) return {label:"起步", cls:""};
+  const ratio = p/tp;
+  if(now() > pdate(c.end)) return {label: p>=80?"已收尾":"已结束", cls: p>=80?"ok":""};
+  if(ratio>=0.9) return {label:"正常", cls:"ok"};
+  if(ratio>=0.65) return {label:"偏慢", cls:"warn"};
+  return {label:"落后", cls:"bad"};
+}
+
+/* ---------- 当前周期 ---------- */
+function thisQuarterCycle(){ const d=new Date(); const q=Math.floor(d.getMonth()/3)+1;
+  return {label:d.getFullYear()+" Q"+q, start:d.getFullYear()+"-"+String((q-1)*3+1).padStart(2,"0")+"-01",
+          end:d.getFullYear()+"-"+String(q*3).padStart(2,"0")+"-"+new Date(d.getFullYear(),q*3,0).getDate()}; }
+function cycles(){ return Object.values(S.cycles).filter(c=>!c.deleted).sort((a,b)=>a.start.localeCompare(b.start)); }
+function activeCycle(){
+  let list = cycles();
+  if(!list.length && UI.seeded !== "none") return null;
+  if(!list.length) return null;
+  let c = list.find(x => x.id===UI.activeCycleId);
+  if(c) return c;
+  c = list.find(x => now()>=pdate(x.start) && now()<=pdate(x.end)) || list[list.length-1];
+  return c || null;
+}
+function setActiveCycle(id){ UI.activeCycleId = id; saveUI(); render(); }
+
+/* =============================================================
+   多设备同步（GitHub Contents API · 零后端）
+   令牌只存本机 localStorage，绝不进代码/导出/同步载荷
+   ============================================================= */
+function syncCfg(){
+  let j={}; try{ j = JSON.parse(localStorage.getItem(SY_KEY))||{}; }catch(e){}
+  return { owner: j.owner||SYNC_DEFAULTS.owner, repo: j.repo||SYNC_DEFAULTS.repo,
+           path: j.path||SYNC_DEFAULTS.path, token: j.token||"" };
+}
+function saveSyncCfg(c){ try{ localStorage.setItem(SY_KEY, JSON.stringify(c)); }catch(e){} }
+function syncUrl(){ const s=syncCfg();
+  return "https://api.github.com/repos/"+encodeURIComponent(s.owner)+"/"+encodeURIComponent(s.repo)+
+         "/contents/"+encodeURIComponent(s.path).replace(/%2F/g,"/"); }
+function syHeaders(tok){ return { Authorization:"Bearer "+tok, Accept:"application/vnd.github+json" }; }
+const b64enc = str => { const b=new TextEncoder().encode(str); let s=""; b.forEach(x=>s+=String.fromCharCode(x)); return btoa(s); };
+const b64dec = s => { const bin=atob(s.replace(/\s/g,"")); const u=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return new TextDecoder().decode(u); };
+
+function logSync(kind, msg){
+  const L = JSON.parse(localStorage.getItem("okr_sync_log")||"{}");
+  L[kind] = {at: now(), msg: msg||""};
+  localStorage.setItem("okr_sync_log", JSON.stringify(L));
+}
+function getSyncLog(){ try{ return JSON.parse(localStorage.getItem("okr_sync_log")||"{}"); }catch(e){ return {}; } }
+
+/* 稳定序列化：用于判断"真的变了吗" */
+function stableStr(o){
+  if(o===null||typeof o!=="object") return JSON.stringify(o);
+  if(Array.isArray(o)) return "["+o.map(stableStr).join(",")+"]";
+  return "{"+Object.keys(o).sort().map(k=>JSON.stringify(k)+":"+stableStr(o[k])).join(",")+"}";
+}
+/* 集合类字段逐键合并：值带正负时间戳，最后操作胜出（正=创建/更新，负=删除墓碑） */
+function mergeByTime(a,b){
+  const A=a||{}, B=b||{}, out={};
+  new Set(Object.keys(A).concat(Object.keys(B))).forEach(k=>{
+    const x=A[k], y=B[k];
+    if(x===undefined) out[k]=y;
+    else if(y===undefined) out[k]=x;
+    else out[k] = Math.abs(y.ts||0) > Math.abs(x.ts||0) ? y : x;
+  });
+  return out;
+}
+/* 实体合并：同 id 取 updatedAt 较新者；deleted 墓碑同样靠时间戳生效 */
+function mergeColl(a,b){
+  const A=a||{}, B=b||{}, out={};
+  for(const id in A) out[id]=A[id];
+  for(const id in B){
+    const x=out[id], y=B[id];
+    if(!x || (y.updatedAt||0) > (x.updatedAt||0)) out[id]=y;
+  }
+  return out;
+}
+function mergeState(local, remote){
+  const before = stableStr(local);
+  const merged = {
+    v:1,
+    cycles: mergeColl(local.cycles, remote.cycles),
+    objectives: mergeColl(local.objectives, remote.objectives),
+    krs: mergeColl(local.krs, remote.krs),
+    checkins: mergeColl(local.checkins, remote.checkins),
+    meta: {updatedAt: now()},
+  };
+  /* 计数统计：合并后条数变化提示"合并 N 处" */
+  const count = st => Object.keys(st.cycles).length+Object.keys(st.objectives).length+Object.keys(st.krs).length+Object.keys(st.checkins).length;
+  const changed = stableStr(merged) !== before;
+  return {merged, changed, added: count(merged)-count(local)};
+}
+
+/* 同步载荷 = 纯状态，不带任何配置/令牌 */
+function payload(){ return {app:"visokr", v:1, exportedAt:new Date().toISOString(), state:S}; }
+function payloadSig(src){
+  const st = src.state||src;
+  const keys = ["cycles","objectives","krs","checkins"];
+  return stableStr(keys.map(k=>st[k]||{}));
+}
+
+function netMsg(e){
+  const m = String((e&&e.message)||e||"");
+  if(/load failed|failed to fetch|networkerror|network request failed|err_/i.test(m))
+    return "连不上 api.github.com —— 网络被限制或需要代理，不是令牌问题";
+  return "同步出错：" + m;
+}
+function statusHint(r){
+  if(r.status===401) return "令牌无效或已被吊销（401）：请到 GitHub 重新生成 fine-grained PAT 并粘贴";
+  if(r.status===403) return "令牌权限不足或被限流（403）：确认该令牌对数据仓库有 Contents 读写权限";
+  if(r.status===404) return null; // 云端还没有文件 → 引导创建
+  return "GitHub 返回 "+r.status;
+}
+
+let syncing = false;
+async function syncPull(silent){
+  const c = syncCfg();
+  if(!c.token){ if(!silent) toast("尚未配置同步令牌"); return false; }
+  if(syncing) return false; syncing = true; setSyncUI("ing");
+  try{
+    const r = await fetch(syncUrl(), {headers: syHeaders(c.token)});
+    if(r.status===404){                 // 云端为空 → 用本机数据创建
+      logSync("info","云端尚无数据，正在用本机数据创建");
+      return await syncPush(silent);
+    }
+    if(!r.ok){ const msg=statusHint(r)||("拉取失败 "+r.status); logSync("error",msg); if(!silent) toast(msg,3600); setSyncUI("error"); return false; }
+    const j = await r.json();
+    const remote = JSON.parse(b64dec(j.content||""));
+    const {merged, changed, added} = mergeState(S, remote.state||remote);
+    if(changed){
+      S = merged; S.meta.updatedAt = S.meta.updatedAt||now();
+      try{ localStorage.setItem(LS_STATE, JSON.stringify(S)); }catch(e){}
+      if(added>0 && !silent) toast("已合并云端 "+added+" 条更新");
+      if(added<0 && !silent) toast("云端删除已生效");
+      render();
+    }
+    logSync("pull","ok");
+    /* 拉取后回写：合并结果是本机∪云端，若云端不是超集就推上去（否则首次连接的数据永远上不去） */
+    if(payloadSig({state:S}) !== payloadSig(remote)) return await syncPush(silent);
+    setSyncUI("ok"); return true;
+  }catch(e){
+    const msg = netMsg(e); logSync("error",msg); if(!silent) toast(msg,4200); setSyncUI("error"); return false;
+  } finally { syncing=false; }
+}
+async function syncPush(silent){
+  const c = syncCfg();
+  if(!c.token) return false;
+  if(syncing && !silent && false) return false;
+  setSyncUI("ing");
+  try{
+    let sha=null;
+    const g = await fetch(syncUrl(), {headers: syHeaders(c.token)});
+    if(g.ok){ sha = (await g.json()).sha; }
+    else if(g.status!==404){ const msg=statusHint(g)||("读取远端失败 "+g.status); logSync("error",msg); setSyncUI("error"); return false; }
+    const body = { message:"sync "+new Date().toISOString(), content: b64enc(JSON.stringify(payload())) };
+    if(sha) body.sha = sha;
+    const r = await fetch(syncUrl(), {method:"PUT", headers: Object.assign({"Content-Type":"application/json"}, syHeaders(c.token)), body: JSON.stringify(body)});
+    if(!r.ok){
+      const msg = statusHint(r)||("推送失败 "+r.status); logSync("error",msg); if(!silent) toast(msg,3800); setSyncUI("error"); return false;
+    }
+    logSync("push","ok"); setSyncUI("ok"); return true;
+  }catch(e){
+    const msg=netMsg(e); logSync("error",msg); if(!silent) toast(msg,4200); setSyncUI("error"); return false;
+  } finally { renderSyncDot(); }
+}
+function queuePush(){
+  if(!syncCfg().token) return;
+  clearTimeout(pendingTimer);
+  pendingTimer = setTimeout(()=>{ if(syncCfg().token) syncPush(true); }, 2500);
+}
+function setSyncUI(kind){
+  const L = getSyncLog();
+  if(kind==="ok") logSync("last", "已同步");
+  renderSyncDot(kind);
+}
+function renderSyncDot(force){
+  const el = $("#sync-dot"); if(!el) return;
+  const c = syncCfg(); const L = getSyncLog();
+  let dot="#bbb", txt="未配置同步";
+  if(!c.token){ dot="#b9bec9"; }
+  else{
+    const err = L.error, lastOk = Math.max((L.pull&&L.pull.at)||0,(L.push&&L.push.at)||0,(L.last&&L.last.at)||0);
+    const errNewer = err && err.at > lastOk;
+    dot = errNewer ? "var(--bad)" : "var(--ok)";
+    txt = errNewer ? "同步异常：点击 ⟳ 重试" : "已同步 · "+ago(lastOk||now());
+  }
+  if(force==="ing"){ dot="var(--warn)"; txt="同步中…"; }
+  if(force==="error"){ dot="var(--bad)"; txt="同步异常：点 ⟳ 或看设置"; }
+  el.innerHTML = '<span class="dot" style="background:'+dot+';'+(force==="ing"?'animation:spin 1s linear infinite':'')+'"></span><span class="txt">'+esc(txt)+'</span>';
+  el.title = (L.error && (getSyncLog().error.at>Math.max((L.pull||{}).at||0,(L.push||{}).at||0))) ? L.error.msg : "同步状态";
+}
+
+/* 一键连接：#t=<token> 打开后立即存好并抹掉 hash */
+function bootstrapTokenFromHash(){
+  const m = /[#&]t=([^&]+)/.exec(location.hash||"");
+  if(!m) return false;
+  try{
+    const tok = decodeURIComponent(m[1]).trim();
+    if(!tok) return false;
+    saveSyncCfg(Object.assign({}, syncCfg(), {token:tok}));
+    history.replaceState(null,"",location.pathname+location.search);
+    return true;
+  }catch(e){ return false; }
+}
+
+/* =============================================================
+   示例数据（一键载入）
+   ============================================================= */
+function seedDemo(){
+  const st = defaultState();
+  const q = thisQuarterCycle();
+  const cid = uid();
+  st.cycles[cid] = {id:cid,...q,createdAt:now(),updatedAt:now(),deleted:false};
+  const mk = (o,krs,checks) => {
+    const oid = uid();
+    st.objectives[oid] = {id:oid,cycleId:cid,createdAt:now(),updatedAt:now(),deleted:false,archived:false,...o};
+    krs.forEach(k=>{ const kid=uid(); st.krs[kid]=Object.assign({id:kid,objId:oid,weight:1,createdAt:now(),updatedAt:now(),deleted:false},k); });
+    checks.forEach(ch=>{ const kid=uid(); st.checkins[kid]=Object.assign({id:kid,objId:oid,createdAt:now(),updatedAt:now(),deleted:false,confidence:"mid",text:""},ch); });
+  };
+  mk({title:"把身体调回低油耗模式", desc:"睡眠+力量+减脂三线并进", color:"#2f9e63", category:"健康"},
+     [{title:"体重从 82kg 减到 76kg", type:"decrease", start:82, current:79.4, target:76, unit:"kg", weight:2},
+      {title:"每周力量训练 ≥3 次的周数", type:"increase", start:0, current:6, target:12, unit:"周"},
+      {title:"日均睡眠 ≥7h 达成率", type:"percent", start:0, current:64, target:100, unit:"%"}],
+     [{date:dstr(new Date(now()-14*864e5)), confidence:"low", text:"两周没练腿，睡眠也垮了，先恢复作息"},
+      {date:dstr(new Date(now()-7*864e5)), confidence:"mid", text:"恢复两次训练，体重 -0.8kg"},
+      {date:dstr(new Date(now())), confidence:"high", text:"连续 3 周 7h+，力量回到节奏"}]);
+  mk({title:"完成从技术 PM 到 AI 产品线的转身", desc:"知识体系 + 实操项目 + 对外表达", color:"#5b5bd6", category:"职业"},
+     [{title:"AI 产品知识清单读完核心书", type:"increase", start:0, current:5, target:12, unit:"本", weight:2},
+      {title:"产出可公开的深度笔记", type:"increase", start:0, current:3, target:10, unit:"篇"},
+      {title:"落地 1 个 AI 应用个人项目（V0 上线）", type:"percent", start:0, current:35, target:100, unit:"%", weight:2}],
+     [{date:dstr(new Date(now()-10*864e5)), confidence:"mid", text:"《大模型应用》读到一半，项目原型卡在数据层"},
+      {date:dstr(new Date(now()-3*864e5)), confidence:"mid", text:"笔记第 3 篇发出，反馈一般，换个选题"}]);
+  mk({title:"家庭财务留出水位", desc:"储蓄率 30%，砍掉自动流失", color:"#d98a12", category:"财务"},
+     [{title:"本季度净储蓄", type:"increase", start:0, current:2.1, target:4.5, unit:"万", weight:2},
+      {title:"订阅服务排查并取消无用项", type:"increase", start:0, current:3, target:7, unit:"项"},
+      {title:"记账 APP 每周复盘（连续）", type:"bool", start:0, current:0, target:1, unit:""}],
+     [{date:dstr(new Date(now()-5*864e5)), confidence:"mid", text:"砍掉两个视频会员，储蓄进度 47%"}]);
+  UI.seeded = cid; UI.activeCycleId = cid; saveUI();
+  return st;
+}
+function isEmpty(){ const s=S; return !Object.keys(s.cycles).length; }
+
+/* =============================================================
+   可视化组件（纯 SVG）
+   ============================================================= */
+function ring(pct, size, color, strokeW){
+  size = size||44; pct = clamp(pct,0,100);
+  const w = strokeW||Math.max(4, size*0.11), r=(size-w)/2, c=2*Math.PI*r, dash=c*pct/100;
+  const col = color||"var(--accent)";
+  const grad = col==="url(#ringGrad)";
+  return '<span class="ring" style="width:'+size+'px;height:'+size+'px;font-size:'+Math.round(size*0.3)+'px">'+
+    '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'">'+
+    '<circle cx="'+size/2+'" cy="'+size/2+'" r="'+r+'" fill="none" style="stroke:var(--chipbg)" stroke-width="'+w+'"/>'+
+    '<circle cx="'+size/2+'" cy="'+size/2+'" r="'+r+'" fill="none" '+(grad?'stroke="'+col+'"':'style="stroke:'+col+'"')+' stroke-width="'+w+'" stroke-linecap="round" stroke-dasharray="'+dash+' '+c+'"/>'+
+    '</svg><span class="val"><b>'+Math.round(pct)+'</b><span style="font-size:.55em">%</span></span></span>';
+}
+function sparkline(vals, w, h, color){
+  w=w||84; h=h||26;
+  if(vals.length<2) return '<span class="small muted">数据不足</span>';
+  const max=100, pts=vals.map((v,i)=>{
+    const x=(i/(vals.length-1))*(w-4)+2, y=h-2-(clamp(v,0,max)/max)*(h-4);
+    return x.toFixed(1)+","+y.toFixed(1);
+  });
+  const last = pts[pts.length-1].split(",");
+  return '<svg width="'+w+'" height="'+h+'" style="vertical-align:middle">'+
+    '<polyline points="'+pts.join(" ")+'" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke:'+(color||"var(--accent)")+'"/>'+
+    '<circle cx="'+last[0]+'" cy="'+last[1]+'" r="2.6" style="fill:'+(color||"var(--accent)")+'"/></svg>';
+}
+function objCheckHistory(o){
+  const krs = krsOf(o); if(!krs.length) return [];
+  const cur = {}; krs.forEach(k=>cur[k.id]=k.current);
+  const list = Object.values(S.checkins).filter(x=>x.objId===o.id && !x.deleted).sort((a,b)=>a.date.localeCompare(b.date));
+  return list.map(ch=>{
+    if(ch.snapshot) Object.assign(cur, ch.snapshot);
+    return oProg(o, cur);
+  });
+}
+function heatmap91(){
+  const days={};
+  Object.values(S.checkins).forEach(c=>{ if(!c.deleted) days[c.date]=(days[c.date]||0)+1; });
+  let cells=""; const today=new Date();
+  for(let i=90;i>=0;i--){ const d=new Date(today.getTime()-i*864e5); const n=days[dstr(d)]||0;
+    const lvl = n===0?0:Math.min(3,n);
+    const bg = lvl===0?"var(--chipbg)": "color-mix(in srgb, var(--accent) "+(18+lvl*26)+"%, var(--card))";
+    cells+='<div class="heatcell" title="'+dstr(d)+(n?" · "+n+" 次检视":"")+'" style="background:'+bg+'"></div>';
+  }
+  return '<div style="display:grid;grid-template-columns:repeat(13,1fr);gap:5px;max-width:320px">'+cells+'</div>';
+}
+
+/* =============================================================
+   视图渲染
+   ============================================================= */
+const TABS = [
+  {id:"dash", ic:"▦", label:"总览"},
+  {id:"board",ic:"◎", label:"看板"},
+  {id:"check",ic:"✎", label:"检视"},
+  {id:"set",  ic:"⚙", label:"设置"},
+];
+function render(){
+  const v = UI.view || "dash";
+  $("#tabs-desk").innerHTML = TABS.map(t=>'<button data-tab="'+t.id+'" class="'+(t.id===v?"on":"")+'">'+t.label+'</button>').join("");
+  $("#tabbar").innerHTML = TABS.map(t=>'<button data-tab="'+t.id+'" class="'+(t.id===v?"on":"")+'"><span class="ic">'+t.ic+'</span>'+t.label+'</button>').join("");
+  const el = $("#view");
+  if(v==="dash") el.innerHTML = viewDash();
+  else if(v==="board") el.innerHTML = viewBoard();
+  else if(v==="check") el.innerHTML = viewCheck();
+  else el.innerHTML = viewSettings();
+  bindView();
+  renderSyncDot();
+}
+
+/* ---------- 空态引导 ---------- */
+function viewEmpty(){
+  return '<div class="card"><div class="empty"><div class="big">◎</div>'+
+    '<p style="margin:4px 0 14px">还没有 OKR 数据。你可以新建周期开始，或先载入一套示例看看效果。</p>'+
+    '<div class="row" style="justify-content:center;gap:10px">'+
+    '<button class="btn primary" data-act="seed">✦ 载入示例</button>'+
+    '<button class="btn" data-act="new-cycle">＋ 新建周期</button></div></div></div>';
+}
+
+/* ---------- 总览 ---------- */
+function viewDash(){
+  if(isEmpty()) return viewEmpty();
+  const c = activeCycle();
+  if(!c) return '<div class="card"><div class="empty">没有进行中的周期，去看板新建一个</div></div>';
+  const objs = cycleObjs(c.id,false);
+  const overall = cycleOverall(c.id), tp = timeProg(c);
+  const doneCnt = objs.filter(o=>oProg(o)>=99.5).length;
+  const krCnt = objs.reduce((a,o)=>a+krsOf(o).length,0);
+  const weekAgo = dstr(new Date(now()-7*864e5));
+  const weekChecked = new Set(Object.values(S.checkins).filter(x=>!x.deleted && x.date>=weekAgo && cycleObjs(c.id,false).some(o=>o.id===x.objId)).map(x=>x.objId)).size;
+  const risky = objs.map(o=>({o,s:objStatus(o)})).filter(x=>["bad","warn"].includes(x.s.cls)).sort((a,b)=>(a.s.cls==="bad"?0:1)-(b.s.cls==="bad"?0:1));
+  /* 趋势线：按日期聚合全周期检视，重建历史总进度 */
+  const trend = cycleTrend(c.id);
+  return ''+
+  '<div class="card">'+
+    '<div class="row" style="align-items:flex-start;gap:18px;flex-wrap:wrap">'+
+      ring(overall, 96, "url(#ringGrad)")+
+      '<div style="flex:1;min-width:200px">'+
+        '<div style="font-size:17px;font-weight:800">'+esc(c.label)+'</div>'+
+        '<div class="small muted mb8">'+c.start+' ~ '+c.end+' · 剩 '+Math.max(0, dayDiff(pdate(c.start)&&pdate(c.end)&&now(), pdate(c.end)))+' 天</div>'+
+        '<div class="small">时间进度 '+Math.round(tp)+'%</div>'+
+        '<div class="bar mt8" style="height:10px"><i style="width:'+tp+'%;background:linear-gradient(90deg,#b9bec9,#8d93ab)"></i></div>'+
+        '<div class="small mt8">OKR 进度 <b style="color:var(--accent)">'+Math.round(overall)+'%</b> · '+
+        (overall>=tp-8?'<span class="chip ok">跟上节奏</span>':overall>=tp-25?'<span class="chip warn">落后节奏</span>':'<span class="chip bad">明显滞后</span>')+'</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="row mt12" style="gap:8px;flex-wrap:wrap">'+
+      '<span class="chip">'+objs.length+' 个目标</span><span class="chip">'+krCnt+' 个 KR</span>'+
+      '<span class="chip '+(doneCnt?"done":"")+'">完成 '+doneCnt+'</span>'+
+      '<span class="chip '+(weekChecked>=Math.min(3,objs.length)?"ok":weekChecked?"warn":"bad")+'">本周检视 '+weekChecked+'/'+objs.length+'</span>'+
+    '</div>'+
+  '</div>'+
+
+  (risky.length?'<div class="card"><h3>⚠ 需要关注 <span class="sub">节奏落后 / 检视不足</span></h3>'+
+    risky.map(x=>{ const lc=lastCheckin(x.o.id);
+      return '<div class="row" style="padding:8px 0;border-bottom:1px dashed var(--line)" data-goto="'+x.o.id+'">'+
+        '<b style="width:8px;height:8px;border-radius:50%;background:'+x.o.color+';flex:none"></b>'+
+        '<div style="flex:1;min-width:0"><div class="small" style="font-weight:700">'+esc(x.o.title)+'</div>'+
+        '<div class="small muted">'+Math.round(oProg(x.o))+'% · 上次检视 '+(lc?lc.date.slice(5):"从未")+'</div></div>'+
+        '<span class="chip '+x.s.cls+'">'+x.s.label+'</span></div>';
+    }).join("")+'</div>' : '')+
+
+  '<div class="grid2">'+
+    '<div class="card"><h3>📈 进度趋势 <span class="sub">按检视重建</span></h3>'+trendChart(trend)+'</div>'+
+    '<div class="card"><h3>🗓 检视热力 <span class="sub">近 91 天</span></h3>'+heatmap91()+
+      '<div class="small muted mt8">每格一天，颜色越深当天检视越多。保持每目标每周 ≥1 次。</div></div>'+
+  '</div>';
+}
+function cycleTrend(cid){
+  const objs = cycleObjs(cid,false);
+  const krSnap = {}; objs.forEach(o=>krsOf(o).forEach(k=>krSnap[k.id]=k));
+  const events = Object.values(S.checkins).filter(x=>!x.deleted && x.objId && S.objectives[x.objId] && S.objectives[x.objId].cycleId===cid)
+                   .sort((a,b)=>a.date.localeCompare(b.date));
+  if(!events.length || !objs.length) return [];
+  const cur={}; Object.keys(krSnap).forEach(id=>cur[id]=krSnap[id].current);
+  const pts=[];
+  events.forEach(ev=>{
+    if(ev.snapshot) Object.assign(cur, ev.snapshot);
+    pts.push({date:ev.date, val: objs.reduce((a,o)=>a+oProg(o,cur),0)/objs.length});
+  });
+  const out=[{date:dstr(pdate(objs[0]&&S.cycles[cid].start)), val:0}];
+  out.push(...pts); out.push({date:dstr(new Date()), val: cycleOverall(cid)});
+  return out;
+}
+function trendChart(pts){
+  if(pts.length<2) return '<div class="empty small">记录 2 次检视后出现趋势</div>';
+  const W=320,H=130,P=8;
+  const xs=pts.map((p,i)=>P+i*(W-2*P)/(pts.length-1));
+  const ys=pts.map(p=>H-P-(clamp(p.val,0,100)/100)*(H-2*P));
+  const line=xs.map((x,i)=>x.toFixed(1)+","+ys[i].toFixed(1)).join(" ");
+  const area=line+" "+xs[xs.length-1].toFixed(1)+","+ (H-P)+" "+P+","+(H-P);
+  let grid=""; [25,50,75].forEach(g=>{const y=(H-P-g/100*(H-2*P)).toFixed(1);
+    grid+='<line x1="'+P+'" x2="'+(W-P)+'" y1="'+y+'" y2="'+y+'" style="stroke:var(--line)" stroke-dasharray="3 4"/>';});
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:'+W+'px">'+grid+
+    '<polygon points="'+area+'" fill="url(#gA)"/>'+
+    '<polyline points="'+line+'" fill="none" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" style="stroke:var(--accent)"/>'+
+    '<circle cx="'+xs[xs.length-1]+'" cy="'+ys[ys.length-1]+'" r="3.4" style="fill:var(--accent)"/></svg>';
+}
+
+/* ---------- 看板 ---------- */
+function viewBoard(){
+  if(isEmpty()) return viewEmpty();
+  const list = cycles();
+  const c = activeCycle() || list[0];
+  const objs = c ? cycleObjs(c.id,false) : [];
+  const arch = c ? cycleObjs(c.id,true).filter(o=>o.archived) : [];
+  return ''+
+  '<div class="pills">'+
+    list.map(x=>'<button class="pill '+(c&&x.id===c.id?"on":"")+'" data-cycle="'+x.id+'">'+esc(x.label)+'</button>').join("")+
+    '<button class="pill" data-act="new-cycle">＋ 周期</button>'+
+  '</div>'+
+  (c?'<div class="row mb8" style="justify-content:space-between"><span class="small muted">'+c.start+' ~ '+c.end+' · '+objs.length+' 个目标</span>'+
+      '<button class="btn small" data-act="edit-cycle" data-id="'+c.id+'">编辑周期</button></div>':'')+
+  '<button class="btn primary" style="width:100%;margin-bottom:14px" data-act="new-obj">＋ 新建目标（O）</button>'+
+  (objs.length? objs.map(objCard).join("") : '<div class="card"><div class="empty">本周期还没有目标</div></div>')+
+  (arch.length?'<details class="card" style="padding:12px 16px"><summary class="small muted" style="cursor:pointer">已归档（'+arch.length+'）</summary>'+arch.map(objCard).join("")+'</details>':"");
+}
+function objCard(o){
+  const st = objStatus(o), p = oProg(o), lc = lastCheckin(o.id);
+  const stale = lc ? dayDiff(pdate(lc.date), new Date()) > 8 : !!lc;
+  const krs = krsOf(o);
+  return '<div class="obj-card" style="--oc:'+o.color+'" id="obj-'+o.id+'">'+
+    '<div class="obj-head">'+ ring(p, 52, o.color, 6) +
+      '<div style="flex:1;min-width:0">'+
+        '<p class="obj-title">'+esc(o.title)+' <span class="chip '+st.cls+'" style="vertical-align:2px">'+st.label+'</span></p>'+
+        (o.desc?'<p class="obj-desc">'+esc(o.desc)+'</p>':'')+
+        '<p class="obj-desc">'+(o.category?"🏷 "+esc(o.category)+" · ":"")+
+          (krs.length? krs.length+" 个 KR · 上次检视 "+(lc?lc.date.slice(5):"从未")+(stale?" <b style=\"color:var(--bad)\">（待更新）</b>":"") : "还没有关键结果")+'</p>'+
+      '</div>'+
+      '<div class="obj-actions">'+
+        '<button class="iconbtn" title="编辑" data-act="edit-obj" data-id="'+o.id+'">✎</button>'+
+        '<button class="iconbtn" title="归档" data-act="archive-obj" data-id="'+o.id+'">▤</button>'+
+        '<button class="iconbtn" title="删除" data-act="del-obj" data-id="'+o.id+'">✕</button>'+
+      '</div></div>'+
+    '<div class="kr-list">'+ krs.map(k=>krRow(k)).join("") + '</div>'+
+    '<div class="obj-foot">'+
+      '<button class="btn small" data-act="new-kr" data-id="'+o.id+'">＋ KR</button>'+
+      '<button class="btn small primary" data-act="checkin" data-id="'+o.id+'">✎ 写检视</button>'+
+    '</div>'+
+    '<div style="position:absolute;right:16px;bottom:12px">'+ (function(){ const h=objCheckHistory(o); return h.length>1?sparkline(h,90,26,o.color):""; })()+'</div>'+
+  '</div>';
+}
+function krRow(k){
+  const p = krProg(k), t = KR_TYPES[k.type]||KR_TYPES.increase;
+  let editor='';
+  if(k.type==="bool")
+    editor = '<label class="row small" style="gap:6px"><input type="checkbox" data-kr="'+k.id+'" '+(Number(k.current)>=1?"checked":"")+' style="width:20px;height:20px">'+(Number(k.current)>=1?"已完成":"未完成")+'</label>';
+  else if(k.type==="percent")
+    editor = '<input type="number" min="0" max="100" step="1" value="'+Number(k.current)+'" data-kr="'+k.id+'"><span class="small muted">/100 '+esc(k.unit||"%")+'</span>';
+  else
+    editor = '<span class="small muted">'+fmtNum(k.start)+' → '+fmtNum(k.target)+'</span>'+
+             '<input type="number" min="'+(k.type==="decrease"?"-1e9":0)+'" step="any" value="'+Number(k.current)+'" data-kr="'+k.id+'"><span class="small muted">'+esc(k.unit||"")+'</span>';
+  return '<div class="kr-row">'+
+    '<div class="kr-name">'+esc(k.title)+'<span class="kr-type">'+t.icon+' '+t.label+'</span>'+
+      (Number(k.weight)>1?'<span class="kr-type">权重×'+k.weight+'</span>':'')+
+      '<button class="iconbtn" style="width:24px;height:24px;font-size:12px" title="编辑 KR" data-act="edit-kr" data-id="'+k.id+'">✎</button>'+
+      '<button class="iconbtn" style="width:24px;height:24px;font-size:12px;color:var(--bad)" title="删除 KR" data-act="del-kr" data-id="'+k.id+'">✕</button></div>'+
+    '<div class="kr-nums">'+editor+'</div>'+
+    '<div class="kr-metrics"><div class="bar"><i style="width:'+p+'%"></i></div><span class="kr-pct">'+Math.round(p)+'%</span></div>'+
+  '</div>';
+}
+
+/* ---------- 检视时间线 ---------- */
+function viewCheck(){
+  if(isEmpty()) return viewEmpty();
+  const list = Object.values(S.checkins).filter(x=>!x.deleted).sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt-a.createdAt);
+  const groups={};
+  list.forEach(ch=>{ const o=S.objectives[ch.objId]; if(!o) return; (groups[o.id]=groups[o.id]||[]).push(ch); });
+  return '<div class="card"><h3>✎ 检视流 <span class="sub">共 '+list.length+' 条</span></h3>'+
+    (list.length? Object.keys(groups).map(oid=>{ const o=S.objectives[oid]; const chs=groups[oid]; const st=objStatus(o);
+      return '<div style="margin-bottom:14px">'+
+        '<div class="row mb8"><b style="width:8px;height:8px;border-radius:50%;background:'+o.color+'"></b>'+
+        '<b style="font-size:14px">'+esc(o.title)+'</b><span class="chip '+st.cls+'">'+Math.round(oProg(o))+'%</span>'+
+        '<button class="btn small" style="margin-left:auto" data-act="checkin" data-id="'+o.id+'">＋ 新检视</button></div>'+
+        '<div style="margin-bottom:6px">'+(function(){ const h=objCheckHistory(o); return h.length>1?sparkline(h,120,30,o.color):""; })()+'</div>'+
+        chs.slice(0,12).map(ch=>{ const cf=CONF2[ch.confidence]||CONF2.mid;
+          return '<div class="tl-item"><div class="tl-date">'+ch.date.slice(5)+'<div class="small">'+cf.txt+'</div></div>'+
+          '<div class="tl-body"><div class="tl-text">'+(esc(ch.text)||'<span class="muted">（无备注）</span>')+'</div>'+
+          (ch.snapshot? snapshotLine(ch):'')+
+          '<div class="small" style="margin-top:3px"><button class="btn small danger" data-act="del-check" data-id="'+ch.id+'">删除</button></div></div></div>';
+        }).join("")+
+      '</div>';
+    }).join("") : '<div class="empty small">还没有检视记录，去看板给任一目标写第一条</div>')+
+  '</div>';
+}
+function snapshotLine(ch){
+  const krs = krsOf(S.objectives[ch.objId]); if(!krs.length || !ch.snapshot) return "";
+  const parts = krs.map(k=>{ const v=ch.snapshot[k.id]; if(v==null) return "";
+    return esc(k.title.split(" ")[0])+" "+fmtNum(v)+(k.unit||""); }).filter(Boolean);
+  return '<div class="small muted mt8">快照：'+parts.join(" · ")+'</div>';
+}
+
+/* ---------- 设置 ---------- */
+function viewSettings(){
+  const c = syncCfg(); const L = getSyncLog();
+  const connected = !!c.token;
+  return ''+
+  '<div class="card"><h3>🔗 多设备同步 <span class="sub">GitHub 私有仓库中转 · 零后端</span></h3>'+
+    '<div class="small muted">状态：'+(connected?'<span style="color:var(--ok)">已连接 '+esc(c.owner)+"/"+esc(c.repo)+"</span>":"<span style=\"color:var(--warn)\">未配置令牌（仅本机保存）</span>")+'</div>'+
+    (L.last? '<div class="small muted">上次同步 · '+ago(Math.max((L.last.at||0),(L.push&&L.push.at)||0,(L.pull&&L.pull.at)||0))+'</div>':"")+
+    (L.error && (!L.pull||L.error.at>=L.pull.at) ? '<div class="small" style="color:var(--bad)">最近异常：'+esc(L.error.msg)+'</div>':"")+
+    '<label class="f">数据仓库 Owner</label><input type="text" id="sy-owner" value="'+esc(c.owner)+'" placeholder="GitHub 用户名">'+
+    '<label class="f">仓库名（建议 private 专用数据仓库）</label><input type="text" id="sy-repo" value="'+esc(c.repo)+'">'+
+    '<label class="f">数据文件路径</label><input type="text" id="sy-path" value="'+esc(c.path)+'">'+
+    '<label class="f">Fine-grained PAT（仅本机 localStorage，永不进代码/导出/同步载荷）</label>'+
+    '<input type="password" id="sy-token" placeholder="github.io 令牌 · 留空=清除" autocomplete="off">'+
+    '<div class="row mt12" style="flex-wrap:wrap">'+
+      '<button class="btn primary" data-act="save-sync">💾 保存并测试连接</button>'+
+      '<button class="btn" data-act="pull">↓ 拉取合并</button>'+
+      '<button class="btn" data-act="push">↑ 推送本机</button>'+
+      '<button class="btn" data-act="diagnose">🩺 网络诊断</button>'+
+    '</div>'+
+    '<div class="small muted mt8">PAT 创建：github.com → Settings → Fine-grained tokens → 只勾这一个数据仓库、Contents: Read and write。</div>'+
+    '<div class="small muted">一键在新设备连接：<button class="btn small" data-act="copy-link">复制链接（含令牌，发给自己后记得撤回消息）</button></div>'+
+    '<div id="diag" class="mt8 small" style="white-space:pre-wrap;display:none;background:var(--card2);padding:10px;border-radius:10px;border:1px dashed var(--line)"></div>'+
+  '</div>'+
+  '<div class="card"><h3>🗄 数据</h3>'+
+    '<div class="row" style="flex-wrap:wrap;gap:8px">'+
+      '<button class="btn" data-act="export">导出 JSON</button>'+
+      '<button class="btn" data-act="import">导入/合并 JSON</button>'+
+      '<button class="btn" data-act="seed">载入示例</button>'+
+      '<button class="btn danger" data-act="wipe">清空全部数据</button>'+
+    '</div>'+
+    '<div class="small muted mt8">当前 '+Object.keys(S.cycles).length+' 周期 · '+Object.keys(S.objectives).length+' 目标 · '+Object.keys(S.krs).length+' KR · '+Object.keys(S.checkins).length+' 检视</div>'+
+  '</div>'+
+  '<div class="card"><h3>ℹ 关于</h3><div class="small muted">'+
+    'VisOKR：个人 OKR 可视化管理。周期 → 目标（O）→ 关键结果（KR，四种度量类型）→ 每周检视（快照+信心度）。'+
+    '数据存本机 localStorage，可选通过私有 GitHub 仓库在手机/电脑间同步；取消与删除以时间戳墓碑跨设备生效。离线可用，添加到主屏幕即成 App。</div></div>';
+}
+
+/* =============================================================
+   弹层（表单）
+   ============================================================= */
+function openModal(html){ $("#overlay").classList.add("open"); $("#modal").innerHTML=html; $("#modal").querySelector("input,textarea,select,button")?.focus(); }
+function closeModal(){ $("#overlay").classList.remove("open"); $("#modal").innerHTML=""; }
+$("#overlay").addEventListener("click", e=>{ if(e.target.id==="overlay") closeModal(); });
+
+function cycleForm(c){
+  c = c||{...thisQuarterCycle()};
+  openModal('<h3>'+(c.id?"编辑周期":"新建周期")+'<button class="x" data-act="close">✕</button></h3>'+
+    '<label class="f">名称</label><input type="text" id="cy-label" value="'+esc(c.label||"")+'" placeholder="如 2026 Q4 / 下半年">'+
+    '<div class="grid2"><div><label class="f">开始</label><input type="date" id="cy-start" value="'+esc(c.start||"")+'"></div>'+
+    '<div><label class="f">结束</label><input type="date" id="cy-end" value="'+esc(c.end||"")+'"></div></div>'+
+    '<div class="row mt12"><button class="btn" data-act="close" style="flex:1">取消</button>'+
+    '<button class="btn primary" id="cy-save" style="flex:2">保存</button></div>');
+  $("#cy-save").onclick = ()=>{
+    const label=$("#cy-label").value.trim()||"未命名周期", start=$("#cy-start").value, end=$("#cy-end").value;
+    if(!start||!end||start>=end){ toast("日期不完整或结束早于开始"); return; }
+    const id = c.id||uid();
+    if(S.cycles[id]) S.cycles[id]=Object.assign(S.cycles[id],{label,start,end,updatedAt:now(),deleted:false});
+    else S.cycles[id]={id,label,start,end,createdAt:now(),updatedAt:now(),deleted:false};
+    UI.activeCycleId=id; save(); closeModal(); toast("周期已保存");
+  };
+}
+function objForm(o){
+  const c = activeCycle();
+  if(!c){ toast("先新建一个周期"); closeModal(); cycleForm(); return; }
+  o = o||{cycleId:c.id,color:OBJ_COLORS[Object.keys(S.objectives).length%OBJ_COLORS.length]};
+  openModal('<h3>'+(o.id?"编辑目标":"新建目标（O）")+'<button class="x" data-act="close">✕</button></h3>'+
+    '<label class="f">目标标题（有野心、能被 KR 衡量）</label><input type="text" id="ob-title" value="'+esc(o.title||"")+'" placeholder="例：把身体调回低油耗模式">'+
+    '<label class="f">一句话补充（可选）</label><input type="text" id="ob-desc" value="'+esc(o.desc||"")+'">'+
+    '<label class="f">分类标签（可选）</label><input type="text" id="ob-cat" value="'+esc(o.category||"")+'" placeholder="健康 / 职业 / 财务 …">'+
+    '<label class="f">颜色</label><div class="color-dots" id="ob-colors">'+
+      OBJ_COLORS.map(cc=>'<button class="cdot '+(cc===(o.color||OBJ_COLORS[0])?"on":"")+'" data-color="'+cc+'" style="background:'+cc+'"></button>').join("")+'</div>'+
+    '<label class="f">所属周期</label><select id="ob-cycle">'+cycles().map(x=>'<option value="'+x.id+'" '+(x.id===o.cycleId?"selected":"")+'>'+esc(x.label)+'</option>').join("")+'</select>'+
+    '<div class="row mt12"><button class="btn" data-act="close" style="flex:1">取消</button>'+
+    '<button class="btn primary" id="ob-save" style="flex:2">保存</button></div>');
+  $("#ob-colors").onclick=e=>{ const b=e.target.closest("[data-color]"); if(!b)return;
+    $$("#ob-colors .cdot").forEach(x=>x.classList.remove("on")); b.classList.add("on"); };
+  $("#ob-save").onclick=()=>{
+    const title=$("#ob-title").value.trim(); if(!title){toast("标题不能为空");return;}
+    const id=o.id||uid();
+    const color=$("#ob-colors .cdot.on")?.getAttribute("data-color")||o.color||OBJ_COLORS[0];
+    const rec={id,cycleId:$("#ob-cycle").value,title,desc:$("#ob-desc").value.trim(),category:$("#ob-cat").value.trim(),color};
+    if(o.id) S.objectives[id]=Object.assign(S.objectives[id],rec,{updatedAt:now(),deleted:false});
+    else S.objectives[id]=Object.assign(rec,{createdAt:now(),updatedAt:now(),deleted:false,archived:false});
+    save(); closeModal(); toast("目标已保存");
+  };
+}
+function krForm(k){
+  const objId = UI.krParent; if(!objId){closeModal();return;}
+  k = k||{type:"increase",start:0,current:0,target:100,weight:1};
+  openModal('<h3>'+(k.id?"编辑关键结果":"新建关键结果（KR）")+'<button class="x" data-act="close">✕</button></h3>'+
+    '<label class="f">KR 标题（可量化、带口径）</label><input type="text" id="kr-title" value="'+esc(k.title||"")+'" placeholder="例：体重从 82kg 减到 76kg">'+
+    '<label class="f">度量类型</label><div class="seg" id="kr-types">'+
+      Object.keys(KR_TYPES).map(t=>'<button data-type="'+t+'" class="'+(t===k.type?"on":"")+'">'+KR_TYPES[t].icon+' '+KR_TYPES[t].label+'</button>').join("")+'</div>'+
+    '<div class="grid2" style="margin-top:4px" id="kr-nums">'+
+      '<div id="kr-start-wrap"><label class="f">起始值</label><input type="number" step="any" id="kr-start" value="'+Number(k.start||0)+'"></div>'+
+      '<div id="kr-cur-wrap"><label class="f">当前值</label><input type="number" step="any" id="kr-current" value="'+Number(k.current||0)+'"></div>'+
+      '<div id="kr-tgt-wrap"><label class="f">目标值</label><input type="number" step="any" id="kr-target" value="'+Number(k.target!=null?k.target:100)+'"></div>'+
+      '<div><label class="f">单位（可空）</label><input type="text" id="kr-unit" value="'+esc(k.unit||"")+'"></div>'+
+      '<div><label class="f">权重（默认 1）</label><input type="number" min="0.1" step="0.5" id="kr-weight" value="'+Number(k.weight||1)+'"></div>'+
+    '</div>'+
+    '<div class="row mt12"><button class="btn" data-act="close" style="flex:1">取消</button>'+
+    '<button class="btn primary" id="kr-save" style="flex:2">保存</button></div>');
+  let type = k.type;
+  const applyType=()=>{
+    $("#kr-start-wrap").style.display = (type==="percent"||type==="bool")?"none":"";
+    $("#kr-tgt-wrap").style.display  = (type==="percent"||type==="bool")?"none":"";
+    if(type==="percent"){ $("#kr-current").value = $("#kr-current").value; }
+    if(type==="bool"){ $("#kr-current").min=0;$("#kr-current").max=1;$("#kr-current").step=1; }
+    else {$("#kr-current").min="";$("#kr-current").max="";$("#kr-current").step="any";}
+  };
+  applyType();
+  $("#kr-types").onclick=e=>{const b=e.target.closest("[data-type]");if(!b)return;
+    $$("#kr-types button").forEach(x=>x.classList.remove("on"));b.classList.add("on");type=b.getAttribute("data-type");applyType();};
+  $("#kr-save").onclick=()=>{
+    const title=$("#kr-title").value.trim(); if(!title){toast("标题不能为空");return;}
+    const id=k.id||uid();
+    let cur=$("#kr-current").value, tgt=$("#kr-target").value, st=$("#kr-start").value;
+    if(type==="percent"){ cur=clamp(Number(cur)||0,0,100); st=0; tgt=100; }
+    if(type==="bool"){ cur=(Number(cur)>=1?1:0); st=0; tgt=1; }
+    const rec={id,objId,title,type,start:st===""?0:Number(st)||0,current:Number(cur)||0,target:tgt===""?100:Number(tgt)||0,
+               unit:$("#kr-unit").value.trim(), weight:Math.max(0.1,Number($("#kr-weight").value)||1)};
+    if(k.id) S.krs[id]=Object.assign(S.krs[id],rec,{updatedAt:now(),deleted:false});
+    else S.krs[id]=Object.assign(rec,{createdAt:now(),updatedAt:now(),deleted:false});
+    save(); closeModal(); toast("KR 已保存");
+  };
+}
+function checkinForm(oid){
+  const o=S.objectives[oid]; if(!o){closeModal();return;}
+  const krs=krsOf(o);
+  openModal('<h3>检视 · '+esc(o.title)+'<button class="x" data-act="close">✕</button></h3>'+
+    '<label class="f">日期</label><input type="date" id="ch-date" value="'+dstr()+'">'+
+    (krs.length?'<label class="f">更新各 KR 当前值（快照会存档，用于趋势图）</label>'+
+      krs.map(k=>'<div class="row mb8"><span class="small" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">'+esc(k.title)+'</span>'+
+        (k.type==="bool"
+          ?'<label class="row small" style="gap:4px"><input type="checkbox" data-chkr="'+k.id+'" '+(Number(k.current)>=1?"checked":"")+'>完成</label>'
+          :'<input type="number" step="any" data-chkr="'+k.id+'" value="'+Number(k.current)+'" style="width:92px;text-align:right">'+
+            '<span class="small muted">'+esc(k.unit||"")+'</span>')+
+        '<span class="kr-pct" style="color:var(--muted)">'+Math.round(krProg(k))+'%</span></div>').join("")
+      :'<div class="small muted">这个目标还没有 KR</div>')+
+    '<label class="f">信心度</label><div class="seg" id="ch-conf">'+
+      Object.keys(CONF2).map(cf=>'<button data-conf="'+cf+'" class="'+(cf==="mid"?"on":"")+'">'+CONF2[cf].label+'</button>').join("")+'</div>'+
+    '<label class="f">本周发生了什么？阻碍 / 下一步（可选）</label><textarea id="ch-text" placeholder="进展、原因、下周动作…"></textarea>'+
+    '<div class="row mt12"><button class="btn" data-act="close" style="flex:1">取消</button>'+
+    '<button class="btn primary" id="ch-save" style="flex:2">保存检视</button></div>');
+  let conf="mid";
+  $("#ch-conf").onclick=e=>{const b=e.target.closest("[data-conf]");if(!b)return;
+    $$("#ch-conf button").forEach(x=>x.classList.remove("on"));b.classList.add("on");conf=b.getAttribute("data-conf");};
+  $("#ch-save").onclick=()=>{
+    const date=$("#ch-date").value||dstr();
+    const snap={};
+    krs.forEach(k=>{ const elx=document.querySelector('[data-chkr="'+k.id+'"]');
+      snap[k.id] = k.type==="bool" ? (elx.checked?1:0) : Number(elx.value)||0; });
+    Object.keys(snap).forEach(kid=>{ if(S.krs[kid] && !S.krs[kid].deleted){
+      S.krs[kid].current=snap[kid]; S.krs[kid].updatedAt=now(); } });
+    const id=uid();
+    S.checkins[id]={id,objId:oid,date,confidence:conf,text:$("#ch-text").value.trim(),snapshot:snap,createdAt:now(),updatedAt:now(),deleted:false};
+    save(); closeModal(); toast("检视已记录");
+  };
+}
+function confirmModal(msg, onYes){
+  openModal('<h3>确认操作<button class="x" data-act="close">✕</button></h3>'+
+    '<div style="padding:8px 0 4px;font-size:14px">'+msg+'</div>'+
+    '<div class="row mt12"><button class="btn" data-act="close" style="flex:1">取消</button>'+
+    '<button class="btn primary" id="cm-yes" style="flex:1">确认</button></div>');
+  $("#cm-yes").onclick=()=>{ onYes(); closeModal(); };
+}
+
+/* =============================================================
+   事件绑定（委托）
+   ============================================================= */
+document.body.addEventListener("click", e=>{
+  const tab = e.target.closest("[data-tab]");
+  if(tab){ UI.view=tab.getAttribute("data-tab"); saveUI(); render(); return; }
+  const cy = e.target.closest("[data-cycle]");
+  if(cy){ setActiveCycle(cy.getAttribute("data-cycle")); return; }
+  const goto = e.target.closest("[data-goto]");
+  if(goto){ UI.view="board"; saveUI(); render(); const t=$("#obj-"+goto.getAttribute("data-goto")); t&&t.scrollIntoView({behavior:"smooth",block:"center"}); return; }
+  const act = e.target.closest("[data-act]");
+  if(!act) return;
+  const a = act.getAttribute("data-act"), id = act.getAttribute("data-id");
+  switch(a){
+    case "close": closeModal(); break;
+    case "seed": confirmModal("载入示例数据？将与现有数据共存（同 id 以时间戳较新为准）", ()=>{ S=mergeState(S,seedDemo()).merged; save(); toast("示例已载入"); }); break;
+    case "new-cycle": cycleForm(); break;
+    case "edit-cycle": cycleForm(S.cycles[id]); break;
+    case "new-obj": objForm(); break;
+    case "edit-obj": objForm(S.objectives[id]); break;
+    case "archive-obj": { const o=S.objectives[id]; if(o){ o.archived=!o.archived; o.updatedAt=now(); save(); toast(o.archived?"已归档":"已恢复"); } break; }
+    case "del-obj": confirmModal("删除该目标及其 KR？（会以删除状态同步到所有设备）", ()=>{
+        S.objectives[id].deleted=true; S.objectives[id].updatedAt=now();
+        krsOf(S.objectives[id]).forEach(k=>{S.krs[k.id].deleted=true;S.krs[k.id].updatedAt=now();});
+        save(); toast("已删除"); }); break;
+    case "del-kr": confirmModal("删除该 KR？", ()=>{ S.krs[id].deleted=true; S.krs[id].updatedAt=now(); save(); toast("已删除"); }); break;
+    case "new-kr": UI.krParent=id; saveUI(); krForm(); break;
+    case "edit-kr": UI.krParent=S.krs[id].objId; krForm(S.krs[id]); break;
+    case "checkin": checkinForm(id); break;
+    case "del-check": { const ch=S.checkins[id]; ch.deleted=true; ch.updatedAt=now(); save(); toast("已删除（墓碑同步）"); break; }
+    case "pull": syncPull(false); break;
+    case "push": syncPush(false); break;
+    case "save-sync": saveSyncFromForm(); break;
+    case "diagnose": diagnose(); break;
+    case "copy-link": copyLink(); break;
+    case "export": exportJSON(); break;
+    case "import": importJSON(); break;
+    case "wipe": confirmModal("清空本机全部 OKR 数据？（若已连接同步，其他设备仍保留云端副本）", ()=>{ S=defaultState(); UI={...UI, seeded:"none"}; save(); toast("已清空"); }); break;
+  }
+});
+document.body.addEventListener("change", e=>{
+  const inp = e.target.closest("[data-kr]");
+  if(inp){ const k=S.krs[inp.getAttribute("data-kr")]; if(!k) return;
+    let v = k.type==="bool" ? (inp.checked?1:0) : Number(inp.value)||0;
+    if(k.type==="percent") v=clamp(v,0,100);
+    k.current=v; k.updatedAt=now(); save(); return; }
+});
+function saveSyncFromForm(){
+  const c = syncCfg();
+  const owner=$("#sy-owner").value.trim(), repo=$("#sy-repo").value.trim(), path=$("#sy-path").value.trim();
+  let tok=$("#sy-token").value.trim();
+  if(!tok) tok=c.token; // 留空=保持不变
+  saveSyncCfg({owner,repo,path,token:tok});
+  $("#sy-token").value="";
+  render();
+  toast("已保存配置，正在测试连接…");
+  syncPull(false);
+}
+function copyLink(){
+  const c=syncCfg();
+  if(!c.token){ toast("请先在上方保存令牌"); return; }
+  const url=location.href.split("#")[0]+"#t="+encodeURIComponent(c.token);
+  navigator.clipboard?.writeText(url).then(()=>toast("链接已复制：只发给自己的设备，聊天里记得撤回"),()=>toast("复制失败，手动选择地址栏+令牌"));
+}
+async function diagnose(){
+  const box=$("#diag"); if(!box) return; box.style.display="block";
+  const lines=[]; const push=s=>{lines.push(s);box.textContent=lines.join("\n");};
+  const c=syncCfg();
+  push("① 配置：owner="+c.owner+" repo="+c.repo+" path="+c.path+"，令牌"+(c.token?"已保存("+c.token.slice(0,4)+"…)":"未保存 ✗"));
+  if(!c.token){push("→ 请先生成 fine-grained PAT 并保存");return;}
+  push("② 连通性：GET https://api.github.com/ …");
+  try{
+    const t0=performance.now(); const r0=await fetch("https://api.github.com/");
+    push("   任何 HTTP 响应都算通（"+r0.status+"，"+Math.round(performance.now()-t0)+"ms）"+(r0.status===403?" — 常见为限流，正常":" ✓"));
+  }catch(e){ push("   ✗ "+netMsg(e)+"（大陆网络下 api.github.com 常被单独阻断；可先手机浏览器直开该地址验证）"); return; }
+  push("③ 令牌/仓库权限：GET 数据文件 …");
+  try{
+    const r=await fetch(syncUrl(),{headers:syHeaders(c.token)});
+    if(r.ok){const j=await r.json();push("   ✓ 文件存在，"+((j.size||0))+" 字节，sha "+(j.sha||"").slice(0,7));}
+    else if(r.status===404) push("   ✓ 令牌可用；云端尚无数据文件，首次推送会自动创建");
+    else if(r.status===401) push("   ✗ 401：令牌无效/过期/被 GitHub 机密扫描吊销（说明它曾出现在公开页面）");
+    else if(r.status===403) push("   ✗ 403：权限不足（需 Contents 读写）或被限流（60 次/时）");
+    else push("   ✗ HTTP "+r.status);
+  }catch(e){ push("   ✗ "+netMsg(e)); }
+  push("④ 建议：点顶栏 ⟳ 做一次完整「拉取→合并→回写」");
+}
+function exportJSON(){
+  const blob=new Blob([JSON.stringify(payload(),null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="okr-"+dstr()+".json"; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  toast("已导出（不含令牌）");
+}
+function importJSON(){
+  const inp=document.createElement("input"); inp.type="file"; inp.accept=".json,application/json";
+  inp.onchange=()=>{ const f=inp.files[0]; if(!f)return; const rd=new FileReader();
+    rd.onload=()=>{ try{ const j=JSON.parse(rd.result);
+        const st=j.state||j; if(!st.cycles) throw new Error("不是 OKR 导出文件");
+        const m=mergeState(S,st); S=m.merged; save();
+        toast("导入合并完成："+(m.added>0?("新增 "+m.added+" 处"):(m.changed?"已合并":"内容相同")));
+      }catch(e){ toast("导入失败："+e.message,4000); } };
+    rd.readAsText(f); };
+  inp.click();
+}
+function bindView(){
+  /* KR 百分比内联编辑已在 change 委托中处理 */
+}
+
+/* =============================================================
+   顶栏与初始化
+   ============================================================= */
+$("#btn-theme").onclick=()=>{ UI.dark=!UI.dark; applyTheme(); saveUI(); };
+$("#btn-sync-now").onclick=async()=>{ const b=$("#btn-sync-now"); b.classList.add("spin");
+  const ok=await syncPull(false); b.classList.remove("spin"); if(ok) renderSyncDot(); };
+function applyTheme(){
+  document.documentElement.setAttribute("data-theme", UI.dark?"dark":"light");
+  const mt=$('meta[name="theme-color"]'); }
+(function initTheme(){
+  if(UI.dark===undefined) UI.dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  applyTheme();
+})();
+
+if(!isEmpty() && UI.seeded===undefined){ /* 有数据就不提示 */ }
+if(isEmpty() && UI.seeded===undefined){
+  /* 首次使用：静默放入示例，用户可一键清空 —— 保证打开即"可视" */
+  S = seedDemo();
+  try{ localStorage.setItem(LS_STATE, JSON.stringify(S)); }catch(e){}
+}
+
+function init(){
+  render();
+  bootstrapTokenFromHash();
+  if(syncCfg().token) syncPull(true);   // 启动静默拉取
+  if(syncCfg().token && UI.seeded==="auto-example") queuePush();
+}
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden && syncCfg().token) syncPull(true); });
+window.addEventListener("online", ()=>{ if(syncCfg().token) syncPull(true); });
+window.addEventListener("hashchange", ()=>{ if(bootstrapTokenFromHash()){ render(); syncPull(true); } });
+
+/* PWA：注册 SW（安全上下文才允许） */
+if("serviceWorker" in navigator && (location.protocol==="https:" || location.hostname==="localhost")){
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+init();
+</script>
+</body>
+</html>
