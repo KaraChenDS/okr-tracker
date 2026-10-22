@@ -385,7 +385,25 @@ function relDay(ds){const t=dstr(),y=dstr(new Date(now()+864e5)),p=dstr(new Date
   return ds===t?"今天":ds===y?"明天":ds===p?"昨天":ds.slice(5).replace("-","/");}
 
 /* ---------- v4.1：页签记忆 / 周一日历 / 日期选择器 ---------- */
-function switchTab(id){UI.tabViews=UI.tabViews||{};UI.tabViews[UI.tab]=UI.view;UI.tab=id;UI.view=UI.tabViews[id]||null;saveUI();render();}
+function viewStack(){if(!UI.tabViews)UI.tabViews={};
+  const cur=UI.tabViews[UI.tab];
+  if(!Array.isArray(cur))UI.tabViews[UI.tab]=cur?[cur]:[];
+  return UI.tabViews[UI.tab];}
+function syncStack(){const st=viewStack();
+  if(!UI.view){UI.tabViews[UI.tab]=[];return;}
+  const i=st.findIndex(v=>v.name===UI.view.name&&v.id===UI.view.id);
+  if(i>=0)UI.tabViews[UI.tab]=st.slice(0,i+1);
+  else st.push(Object.assign({},UI.view));}
+function pushView(v){UI.view=v;syncStack();saveUI();}
+function popView(){const st=viewStack();if(st.length)st.pop();
+  UI.view=st.length?st[st.length-1]:null;saveUI();render();
+  requestAnimationFrame(()=>window.scrollTo(0,(viewStack().slice(-1)[0]||{}).scroll||0));}
+function dropGoalFromStacks(gid){Object.keys(UI.tabViews||{}).forEach(k=>{const st=UI.tabViews[k];
+  if(Array.isArray(st))UI.tabViews[k]=st.filter(v=>!(v.name==="goal"&&v.id===gid));});}
+function switchTab(id){syncStack();
+  const cur=viewStack();if(cur.length)cur[cur.length-1].scroll=Math.round(window.scrollY||0);
+  UI.tab=id;const st=viewStack();UI.view=st.length?st[st.length-1]:null;saveUI();render();
+  requestAnimationFrame(()=>window.scrollTo(0,(st.slice(-1)[0]||{}).scroll||0));}
 function isOpen(gid){return !!(UI.openGoals&&UI.openGoals[gid])||UI.openGoal===gid;}
 function toggleOpen(gid){UI.openGoals=UI.openGoals||{};UI.openGoals[gid]=!isOpen(gid);if(UI.openGoals[gid])delete UI.openGoal;saveUI();}
 function mondayOf(ds){const d=pdate(ds);return new Date(d.getFullYear(),d.getMonth(),d.getDate()-((d.getDay()+6)%7));}
@@ -1114,14 +1132,14 @@ function goalForm(g,preGroup){
       if(s.id&&S.subgoals[s.id])S.subgoals[s.id]=Object.assign(S.subgoals[s.id],{title:s.title.trim(),target:Number(s.target)||10,updatedAt:now()});
       else{const sid=uid();S.subgoals[sid]={id:sid,goalId:id,title:s.title.trim(),type:"count",current:0,target:Number(s.target)||10,createdAt:now(),updatedAt:now(),deleted:false};}});
     if(!isNew)subsOf(id).forEach(s=>{if(!keep.has(s.id)){s.deleted=true;s.updatedAt=now();}});
-    save();closeModal();UI.view={name:"goal",id};render();toast(isNew?"目标已创建":"已保存");};
+    save();closeModal();pushView({name:"goal",id});render();toast(isNew?"目标已创建":"已保存");};
   if(!isNew){const id0=g.id;
     $("#go-del").onclick=()=>confirmModal("删除目标「"+esc(g.title)+"」及其拆分目标？",()=>{
       S.goals[id0].deleted=true;S.goals[id0].updatedAt=now();
       subsOf(id0).forEach(s=>{s.deleted=true;s.updatedAt=now();});
       Object.values(S.tasks).forEach(t=>{if(!t.deleted&&t.goalId===id0){t.goalId=null;t.subgoalId=null;t.updatedAt=now();}});
       Object.values(S.records).forEach(r=>{if(!r.deleted&&r.goalId===id0){r.deleted=true;r.updatedAt=now();}});
-      save();closeModal();UI.tab="lib";UI.view=null;render();toast("已删除");});}
+      save();closeModal();dropGoalFromStacks(id0);UI.tab="lib";const st=viewStack();UI.view=st.length?st[st.length-1]:null;saveUI();render();toast("已删除");});}
 }
 function subForm(sid){
   const s=S.subgoals[sid];if(!s)return;
@@ -1319,7 +1337,7 @@ function deleteGoal(id){const g=S.goals[id];if(!g||g.deleted)return;
   subsOf(id).forEach(s=>{s.deleted=true;s.updatedAt=now();});
   Object.values(S.tasks).forEach(t=>{if(!t.deleted&&t.goalId===id){t.goalId=null;t.subgoalId=null;t.updatedAt=now();}});
   Object.values(S.records).forEach(r=>{if(!r.deleted&&r.goalId===id){r.deleted=true;r.updatedAt=now();}});
-  save();UI.tab="lib";UI.view=null;render();toast("已删除");}
+  save();dropGoalFromStacks(id);UI.tab="lib";const st=viewStack();UI.view=st.length?st[st.length-1]:null;saveUI();render();toast("已删除");}
 
 /* ---------- 周时间轴拖拽改期（按住紫条左右拖，按天吸附；轻点=进详情） ---------- */
 let dragState=null,dragSuppressed=false;
@@ -1355,11 +1373,11 @@ document.body.addEventListener("click",e=>{
   if(tab){switchTab(tab.getAttribute("data-tab"));return;}
   const nav=e.target.closest("[data-nav]");
   if(nav){const n=nav.getAttribute("data-nav");
-    if(n==="back")UI.view=null;
+    if(n==="back"){popView();return;}
     else if(n==="taskmode"){UI.taskMode=(UI.taskMode||"cal")==="cal"?"list":"cal";saveUI();render();return;}
     else if(n==="add-task"){taskForm();return;}
-    else UI.view={name:n};
-    saveUI();render();return;}
+    else pushView({name:n});
+    render();return;}
   const calm=e.target.closest("[data-calm]");
   if(calm){UI.calMode=calm.getAttribute("data-calm");saveUI();render();return;}
   const cn=e.target.closest("[data-calnav]");
@@ -1368,11 +1386,11 @@ document.body.addEventListener("click",e=>{
   if(chev){toggleOpen(chev.getAttribute("data-chev"));render();return;}
   if(dragSuppressed)return;
   const openG=e.target.closest("[data-open-goal]");
-  if(openG){UI.tab=openG.closest(".wk")?"sum":UI.tab;UI.view={name:"goal",id:openG.getAttribute("data-open-goal")};saveUI();render();return;}
+  if(openG){UI.tab=openG.closest(".wk")?"sum":UI.tab;pushView({name:"goal",id:openG.getAttribute("data-open-goal")});render();return;}
   const card=e.target.closest("[data-open-card]");
-  if(card){UI.view={name:"goal",id:card.getAttribute("data-open-card")};saveUI();render();return;}
+  if(card){pushView({name:"goal",id:card.getAttribute("data-open-card")});render();return;}
   const grp=e.target.closest("[data-group]");
-  if(grp&&!e.target.closest("[data-act]")){UI.view={name:"group",id:grp.getAttribute("data-group")};UI.gtab="进行中";saveUI();render();return;}
+  if(grp&&!e.target.closest("[data-act]")){pushView({name:"group",id:grp.getAttribute("data-group")});UI.gtab="进行中";saveUI();render();return;}
   const gtab=e.target.closest("[data-gtab]");
   if(gtab){UI.gtab=gtab.getAttribute("data-gtab");render();return;}
   const ttab=e.target.closest("[data-ttab]");
@@ -1430,7 +1448,7 @@ document.body.addEventListener("click",e=>{
     case"copy-link":copyLink();break;
     case"export":exportJSON();break;
     case"import":importJSON();break;
-    case"wipe":confirmModal("清空本机全部数据？（已连接同步时，其他设备的云端副本仍在）",()=>{S=defaultState();save();UI.view=null;toast("已清空");});break;
+    case"wipe":confirmModal("清空本机全部数据？（已连接同步时，其他设备的云端副本仍在）",()=>{S=defaultState();UI.tabViews={};save();UI.view=null;toast("已清空");});break;
     case"about":openModal('<h3>关于 VisOKR<button class="x" data-act="close">✕</button></h3><div class="small" style="line-height:1.8">'+
       '融合 <b>Vis</b> 的任务推进体验与 <b>OKR</b> 度量节奏分析的个人目标管理 PWA。<br>目标 → 拆分目标（⭐计数 / ↘递减 / %百分比 / ✓是否）→ 任务完成自动推进。<br>节奏引擎：进度 ÷ 时间进度 → 正常/偏慢/落后；复盘快照 → 趋势图。<br>数据：本机 localStorage + 可选 GitHub 私有仓库同步。<br>开源自用：github.com/KaraChenDS/okr-tracker</div>');break;
     case"help":openModal('<h3>帮助<button class="x" data-act="close">✕</button></h3><div class="small" style="line-height:1.9">'+
