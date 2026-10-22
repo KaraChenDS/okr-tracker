@@ -134,6 +134,7 @@ a{color:var(--accent)}
 .task .imp{color:var(--purple-ink);background:var(--chipbg);border-radius:6px;padding:1px 6px;font-weight:700;display:inline-flex;gap:3px;align-items:center}
 .task .star{position:relative;flex:none;width:44px;height:44px;display:grid;place-items:center;font-size:24px}
 .task .star .badge{position:absolute;bottom:0;right:0;background:var(--purple);color:#fff;font-size:10.5px;font-weight:700;border-radius:99px;padding:1.5px 6px;border:2px solid var(--card)}
+.task .rep{font-size:10.5px;background:var(--chipbg);color:var(--purple-ink);border-radius:6px;padding:1.5px 7px;margin-left:8px;font-weight:700;white-space:nowrap;vertical-align:2px}
 .fab{position:fixed;right:max(20px,calc(50% - 320px + 20px));bottom:calc(96px + env(safe-area-inset-bottom));z-index:40;
   width:58px;height:58px;border-radius:50%;background:var(--card);color:var(--accent);font-size:30px;font-weight:300;display:grid;place-items:center;box-shadow:var(--shadow2)}
 .fab:active{transform:scale(.94)}
@@ -275,6 +276,14 @@ const now=()=>Date.now();
 const dstr=d=>{const x=d||new Date();return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");};
 const pdate=s=>{if(!s)return null;const p=String(s).split("-").map(Number);return new Date(p[0],p[1]-1,p[2]);};
 const WD=["周日","周一","周二","周三","周四","周五","周六"];
+const REPEATS={none:"不重复",weekly:"每周",biweekly:"每两周",monthly:"每月",yearly:"每年"};
+function nextDue(due,rep){const d=pdate(due);if(!d||!rep||rep==="none")return due;
+  if(rep==="weekly")d.setDate(d.getDate()+7);
+  else if(rep==="biweekly")d.setDate(d.getDate()+14);
+  else{const day=d.getDate();d.setDate(1);
+    if(rep==="monthly")d.setMonth(d.getMonth()+1);else d.setFullYear(d.getFullYear()+1);
+    const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();d.setDate(Math.min(day,last));/* 月末钳制：1/31+1月=2/28 */}
+  return dstr(d);}
 const fmtNum=v=>(Math.round(v*100)/100).toString();
 const dayDiff=(a,b)=>Math.round((b-a)/864e5);
 function ago(ts){const m=Math.floor((now()-ts)/60000);if(m<1)return"刚刚";if(m<60)return m+" 分钟前";const h=Math.floor(m/60);if(h<24)return h+" 小时前";const d=Math.floor(h/24);return d<30?d+" 天前":new Date(ts).toLocaleDateString("zh-CN");}
@@ -717,7 +726,7 @@ function taskRow(t){
   if(t.due){meta.push(WD[pdate(t.due).getDay()]);meta.push(relDay(t.due));if(t.time)meta.push(t.time);}
   return '<div class="task '+(t.done?"done":"")+'" data-task-open="'+t.id+'">'+
     '<button class="cb" data-toggle="'+t.id+'">'+(t.done?"✓":"")+'</button>'+
-    '<div class="bd"><div class="tt">'+esc(t.title)+'</div>'+
+    '<div class="bd"><div class="tt">'+esc(t.title)+(t.repeat&&t.repeat!=="none"?'<span class="rep">🔁 '+REPEATS[t.repeat]+'</span>':'')+'</div>'+
     (meta.length?'<div class="meta '+(overdue?"overdue":"")+'">'+meta.join(",")+(overdue?" · 逾期":"")+'</div>':'<div class="meta">未计划</div>')+
     (g?'<div class="link">'+esc(g.title)+'<span class="imp">⬆ '+fmtImp(imp)+'</span></div>':'')+
     '</div>'+
@@ -892,6 +901,8 @@ function taskForm(t){
     '<label class="f">任务标题</label><input type="text" id="tk-title" value="'+esc(t.title||"")+'" placeholder="如 AI agent落地流程">'+
     '<div class="row" style="gap:10px"><div style="flex:1"><label class="f">日期（留空=未计划）</label><input type="date" id="tk-due" value="'+esc(t.due||UI.pickToday||"")+'"></div>'+
     '<div style="flex:1"><label class="f">时间（可选）</label><input type="time" id="tk-time" value="'+esc(t.time||"")+'"></div></div>'+
+    '<label class="f">重复（完成后自动生成下一次）</label><div class="tsegs" id="tk-rep">'+
+      Object.keys(REPEATS).map(k=>'<button data-rep="'+k+'" class="'+((t.repeat||"none")===k?"on":"")+'">'+REPEATS[k]+'</button>').join("")+'</div>'+
     '<label class="f">关联目标（完成后推进拆分目标）</label><select id="tk-goal"><option value="">（不关联）</option>'+
       goals.map(g=>'<option value="'+g.id+'" '+(g.id===t.goalId?"selected":"")+'>'+esc(g.title)+'</option>').join("")+'</select>'+
     '<label class="f">推进哪个拆分目标</label><select id="tk-sub"></select>'+
@@ -902,10 +913,15 @@ function taskForm(t){
     $("#tk-sub").innerHTML=ss.length?ss.map(s=>'<option value="'+s.id+'" '+(s.id===t.subgoalId?"selected":"")+'>'+esc(s.title)+'（'+sgDisplay(s).replace(/<[^>]+>/g,"")+'）</option>').join(""):'<option value="">（先给目标加拆分目标）</option>';
     $("#tk-sub").disabled=!ss.length;};
   fillSubs();$("#tk-goal").onchange=fillSubs;
+  let rep=t.repeat||"none";
+  $("#tk-rep").onclick=e=>{const b=e.target.closest("[data-rep]");if(!b)return;
+    $$("#tk-rep button").forEach(x=>x.classList.remove("on"));b.classList.add("on");rep=b.getAttribute("data-rep");};
   $("#tk-save").onclick=()=>{const title=$("#tk-title").value.trim();if(!title){toast("标题不能为空");return;}
+    const due=$("#tk-due").value||"";
+    if(rep!=="none"&&!due){toast("重复任务需要先选日期");return;}
     const id=t.id||uid();
-    const rec={id,title,due:$("#tk-due").value||"",time:$("#tk-time").value||"",goalId:$("#tk-goal").value||null,
-      subgoalId:$("#tk-goal").value&&$("#tk-sub").value?$("#tk-sub").value:null,inc:Math.max(1,Number($("#tk-inc").value)||1)};
+    const rec={id,title,due,time:$("#tk-time").value||"",goalId:$("#tk-goal").value||null,
+      subgoalId:$("#tk-goal").value&&$("#tk-sub").value?$("#tk-sub").value:null,inc:Math.max(1,Number($("#tk-inc").value)||1),repeat:rep};
     if(isNew)S.tasks[id]=Object.assign(rec,{done:false,createdAt:now(),updatedAt:now(),deleted:false});
     else S.tasks[id]=Object.assign(S.tasks[id],rec,{updatedAt:now()});
     save();closeModal();toast(isNew?"任务已添加":"已保存");};
@@ -924,6 +940,18 @@ function toggleTask(id){
   t.done=!t.done;t.doneAt=t.done?now():null;t.updatedAt=now();
   const s=t.subgoalId&&S.subgoals[t.subgoalId]&&!S.subgoals[t.subgoalId].deleted?S.subgoals[t.subgoalId]:null;
   if(s)advanceSub(s,Number(t.inc)||1,t.done?1:-1);
+  if(t.done&&t.repeat&&t.repeat!=="none"&&t.due){
+    const alive=t.spawnId&&S.tasks[t.spawnId]&&!S.tasks[t.spawnId].deleted;
+    if(!alive){const nid=uid();
+      S.tasks[nid]={id:nid,title:t.title,due:nextDue(t.due,t.repeat),time:t.time||"",goalId:t.goalId||null,subgoalId:t.subgoalId||null,
+        inc:Number(t.inc)||1,repeat:t.repeat,spawnedBy:t.id,done:false,createdAt:now(),updatedAt:now(),deleted:false};
+      t.spawnId=nid;
+      toast("🔁 下一次已生成："+S.tasks[nid].due.slice(5).replace("-","/"));
+    }
+  }else if(!t.done&&t.spawnId){
+    const sp=S.tasks[t.spawnId];
+    if(sp&&!sp.deleted&&!sp.done){sp.deleted=true;sp.updatedAt=now();}
+    t.spawnId=null;}
   save();}
 function bumpSub(id){const s=S.subgoals[id];if(!s)return;
   advanceSub(s,1,sgType(s)==="bool"&&Number(s.current)>=1?-1:1);save();}
@@ -1061,7 +1089,7 @@ document.body.addEventListener("click",e=>{
     case"about":openModal('<h3>关于 VisOKR<button class="x" data-act="close">✕</button></h3><div class="small" style="line-height:1.8">'+
       '融合 <b>Vis</b> 的任务推进体验与 <b>OKR</b> 度量节奏分析的个人目标管理 PWA。<br>目标 → 拆分目标（⭐计数 / ↘递减 / %百分比 / ✓是否）→ 任务完成自动推进。<br>节奏引擎：进度 ÷ 时间进度 → 正常/偏慢/落后；复盘快照 → 趋势图。<br>数据：本机 localStorage + 可选 GitHub 私有仓库同步。<br>开源自用：github.com/KaraChenDS/okr-tracker</div>');break;
     case"help":openModal('<h3>帮助<button class="x" data-act="close">✕</button></h3><div class="small" style="line-height:1.9">'+
-      '<b>日常推进</b>：任务打勾 → 关联拆分目标自动 +N → 目标进度上涨。<br><b>手动补记</b>：摘要页紫色卡 ＋ 按钮直接推进。<br><b>每周仪式</b>：每个目标写一条复盘（带信心度），超 8 天没写会亮「待更新」。<br><b>看节奏</b>：摘要顶部季度卡 = 总进度环 + 时间对照 + 风险清单。<br><b>多设备</b>：我的 → 多设备同步，贴一次 fine-grained PAT。<br><b>离线</b>：添加到主屏幕，无网也能记，联网后自动补传。</div>');break;
+      '<b>日常推进</b>：任务打勾 → 关联拆分目标自动 +N → 目标进度上涨。<br><b>重复任务</b>：设为每周/双周/每月/每年的任务，完成后自动生成下一次（锚定原计划日期顺延，月末自动钳制）；取消打勾会收回未动过的下一次。<br><b>手动补记</b>：摘要页紫色卡 ＋ 按钮直接推进。<br><b>每周仪式</b>：每个目标写一条复盘（带信心度），超 8 天没写会亮「待更新」。<br><b>看节奏</b>：摘要顶部季度卡 = 总进度环 + 时间对照 + 风险清单。<br><b>多设备</b>：我的 → 多设备同步，贴一次 fine-grained PAT。<br><b>离线</b>：添加到主屏幕，无网也能记，联网后自动补传。</div>');break;
   }
 });
 function saveSyncFromForm(){
