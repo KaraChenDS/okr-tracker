@@ -98,6 +98,10 @@ a{color:var(--accent)}
 .sg .plus{width:30px;height:30px;border-radius:50%;border:2px solid rgba(255,255,255,.85);display:grid;place-items:center;font-size:18px;font-weight:600;color:#fff;flex:none}
 .sg .plus:active{background:rgba(255,255,255,.25)}
 .sg .sgauto{font-size:10.5px;background:rgba(255,255,255,.22);border-radius:99px;padding:3px 9px;font-weight:700;white-space:nowrap;flex:none}
+.type-notes{margin-top:8px;font-size:12px;line-height:1.75;color:var(--muted)}
+.type-notes div{padding:2px 8px;border-radius:8px;border-left:2.5px solid transparent}
+.type-notes div.on{color:var(--ink);background:var(--chipbg);border-left-color:var(--purple)}
+.type-notes b{font-weight:700}
 .ckrow{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;font-weight:700;cursor:pointer}
 .ckrow input[type=checkbox]{width:19px;height:19px;accent-color:var(--purple);flex:none}
 .sg .mp{height:4px;border-radius:99px;background:rgba(255,255,255,.3);margin-top:9px;overflow:hidden}
@@ -1160,10 +1164,10 @@ function subForm(sid){
     '</div>'+
     '<div class="small muted" id="sb-hint" style="margin-top:8px"></div>'+
     '<div class="row mt12"><button class="btn danger" id="sb-del">删除</button><button class="btn" data-act="close" style="flex:1">取消</button><button class="btn primary" id="sb-save" style="flex:2">保存</button></div>');
-  const HINTS={count:"计数：做到一件 +1，达到目标值即完成。例：读完书 0→12 本",
+  const HINTS={count:"计数：用于小而明确的任务——做一件 +1，如「读完 12 本书」「砍掉 7 项订阅」",
     decrease:"递减：从起始值降到目标值即完成。例：体重 82 → 76",
-    percent:"百分比：直接填当前百分数，满 100% 达成",
-    bool:"是否：只有完成/未完成两种状态"};
+    percent:"百分比：可用于周期循环的目标——如「每周保持训练 3 次」，按推荐量达成率推进",
+    bool:"是否：一次性完成/未完成。如「V0 上线」"};
   const applyType=()=>{
     const dec=type==="decrease";
     if(dec)auto=false;
@@ -1432,14 +1436,22 @@ document.body.addEventListener("click",e=>{
         '<label class="f">标题</label><input type="text" id="ns-title" placeholder="如 产出作品集">'+
         '<label class="f">度量类型</label><div class="tsegs" id="ns-types">'+
           Object.keys(SG_TYPES).map(k=>'<button data-sgt="'+k+'" class="'+(k==="count"?"on":"")+'">'+SG_TYPES[k].icon+' '+SG_TYPES[k].label+'</button>').join("")+'</div>'+
+        '<div class="type-notes" id="ns-notes">'+
+          '<div data-tn="count"><b>⭐ 计数</b>：用于小而明确的任务——做一件 +1，如「读完 12 本书」「砍掉 7 项订阅」</div>'+
+          '<div data-tn="percent"><b>% 百分比</b>：可用于周期循环的目标——如「每周保持训练 3 次」，按推荐量达成率推进</div>'+
+          '<div data-tn="decrease"><b>↘ 递减</b>：从起始值降到目标值——如体重 82 → 76</div>'+
+          '<div data-tn="bool"><b>✓ 是否</b>：一次性完成/未完成——如「V0 上线」</div>'+
+        '</div>'+
         '<div class="row mt8" style="gap:10px"><div id="ns-start-wrap" style="flex:1;display:none"><label class="f">起始值</label><input type="number" step="any" id="ns-start" value="0"></div>'+
         '<div style="flex:1"><label class="f">目标值</label><input type="number" step="any" id="ns-tgt" value="10"></div></div>'+
         '<div class="row mt12"><button class="btn" data-act="close" style="flex:1">取消</button><button class="btn primary" id="ns-save" style="flex:2">添加</button></div>');
       let ntype="count";
       const apply=()=>{$("#ns-start-wrap").style.display=ntype==="decrease"?"block":"none";
-        $("#ns-tgt").value=ntype==="percent"?100:(ntype==="bool"?1:10);};
+        $("#ns-tgt").value=ntype==="percent"?100:(ntype==="bool"?1:10);
+        $$("#ns-notes div").forEach(x=>x.classList.toggle("on",x.getAttribute("data-tn")===ntype));};
       $("#ns-types").onclick=ev=>{const b=ev.target.closest("[data-sgt]");if(!b)return;
         $$("#ns-types button").forEach(x=>x.classList.remove("on"));b.classList.add("on");ntype=b.getAttribute("data-sgt");apply();};
+      apply();
       $("#ns-save").onclick=()=>{const title=$("#ns-title").value.trim();if(!title){toast("标题不能为空");return;}
         const sid=uid();S.subgoals[sid]={id:sid,goalId:gid,title,type:ntype,current:0,
           start:Number($("#ns-start").value)||0,target:ntype==="percent"?100:(ntype==="bool"?1:(Number($("#ns-tgt").value)||10)),
