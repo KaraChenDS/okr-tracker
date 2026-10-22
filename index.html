@@ -158,6 +158,11 @@ a{color:var(--accent)}
 .heatgrid{display:grid;grid-template-columns:repeat(13,1fr);gap:5px;max-width:320px}
 .heatcell{width:12px;height:12px;border-radius:4px;background:var(--chipbg)}
 .streak{display:inline-flex;align-items:center;gap:4px;background:var(--warnbg);color:var(--warn);border-radius:99px;padding:2px 9px;font-size:11.5px;font-weight:800}
+.motto{font-size:14.5px;font-style:italic;line-height:1.6;cursor:pointer;background:linear-gradient(135deg,color-mix(in srgb,var(--purple) 9%,var(--card)),var(--card))}
+.iconbtn{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:var(--muted)}
+.iconbtn:active{background:var(--chipbg)}
+.motto .muted{font-style:normal;font-size:13px}
+.tcount{display:inline-block;background:var(--chipbg);color:var(--purple-ink);border-radius:8px;padding:1px 8px;font-size:13px;font-weight:800;margin-right:8px;font-style:normal;vertical-align:2px}
 
 /* ============ 我的 ============ */
 .vip{background:linear-gradient(120deg,#17181d,#2b2d3a);border-radius:22px;color:#fff;padding:20px;margin-bottom:16px;position:relative;overflow:hidden;box-shadow:var(--shadow)}
@@ -277,6 +282,8 @@ const dstr=d=>{const x=d||new Date();return x.getFullYear()+"-"+String(x.getMont
 const pdate=s=>{if(!s)return null;const p=String(s).split("-").map(Number);return new Date(p[0],p[1]-1,p[2]);};
 const WD=["周日","周一","周二","周三","周四","周五","周六"];
 const REPEATS={none:"不重复",weekly:"每周",biweekly:"每两周",monthly:"每月",yearly:"每年"};
+const OBJ_COLORS=["#7b7bea","#e8590c","#1c7ed6","#2f9e63","#e03131","#e6a700","#0ca678","#d6336c","#5f3dc4"];
+const GROUP_ICONS=["📁","","💪","📚","💰","🎨","🌙","🔥","🏠","💼","🎮","✈️","🎸","🥗"];
 function nextDue(due,rep){const d=pdate(due);if(!d||!rep||rep==="none")return due;
   if(rep==="weekly")d.setDate(d.getDate()+7);
   else if(rep==="biweekly")d.setDate(d.getDate()+14);
@@ -376,7 +383,7 @@ function timeProgOf(s,e){const a=pdate(s),b=pdate(e);if(!a||!b)return 0;return c
 function seedDemo(){
   const st=defaultState();
   const gid=uid();
-  st.goals[gid]={id:gid,groupId:null,title:"面试进展",start:dstr(),end:dstr(new Date(now()+30*864e5)),createdAt:now(),updatedAt:now(),deleted:false};
+  st.goals[gid]={id:gid,groupId:null,title:"面试进展",color:"#7b7bea",start:dstr(),end:dstr(new Date(now()+30*864e5)),createdAt:now(),updatedAt:now(),deleted:false};
   const sg=(t,extra)=>{const id=uid();st.subgoals[id]=Object.assign({id,goalId:gid,title:t,type:"count",current:0,target:10,createdAt:now(),updatedAt:now(),deleted:false},extra||{});return id;};
   const s1=sg("产出作品集"), s2=sg("把所有项目全盘复盘"), s3=sg("能用英文口述项目经验");
   const tid=uid();
@@ -408,6 +415,8 @@ function mergeColl(a,b){const A=a||{},B=b||{},out={};
 function mergeState(local,remote){const before=stableStr(local);
   const merged={v:2,meta:{updatedAt:now()}};
   COLL.forEach(k=>merged[k]=mergeColl(local[k],remote[k]));
+  const lm=local.motto||{},rm=remote.motto||{};
+  merged.motto=(rm.updatedAt||0)>(lm.updatedAt||0)?(rm.updatedAt?rm:{}):(lm.updatedAt?lm:{});
   const cnt=st=>COLL.reduce((a,k)=>a+Object.keys(st[k]||{}).length,0);
   return{merged,changed:stableStr(merged)!==before,added:cnt(merged)-cnt(local)};}
 function payload(){return{app:"visokr",v:2,exportedAt:new Date().toISOString(),state:S};}
@@ -466,13 +475,30 @@ function bootstrapTokenFromHash(){const m=/[#&]t=([^&]+)/.exec(location.hash||""
 /* =============================================================
    可视化（v1 移植：环 / 迷你趋势 / 热力）
    ============================================================= */
-function ring(pct,size,strokeW){size=size||44;pct=clamp(pct,0,100);
-  const w=strokeW||Math.max(4,size*0.11),r=(size-w)/2,c=2*Math.PI*r,dash=c*pct/100;
+function ring(pct,size,strokeW){size=size||44;pct=clamp(pct,0,100);  const w=strokeW||Math.max(4,size*0.11),r=(size-w)/2,c=2*Math.PI*r,dash=c*pct/100;
   return '<span class="ring" style="width:'+size+'px;height:'+size+'px;font-size:'+Math.round(size*0.3)+'px">'+
     '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'">'+
     '<circle cx="'+size/2+'" cy="'+size/2+'" r="'+r+'" fill="none" style="stroke:var(--chipbg)" stroke-width="'+w+'"/>'+
     '<circle cx="'+size/2+'" cy="'+size/2+'" r="'+r+'" fill="none" stroke="url(#ringGrad)" stroke-width="'+w+'" stroke-linecap="round" stroke-dasharray="'+dash+' '+c+'"/>'+
     '</svg><span class="val"><b>'+Math.round(pct)+'</b><span style="font-size:.55em">%</span></span></span>';}
+/* 目标色工具 */
+function goalColor(g){return g&&g.color||"#7b7bea";}
+function goalTaskStats(gid){const ts=Object.values(S.tasks).filter(x=>!x.deleted&&x.goalId===gid);
+  return{done:ts.filter(x=>x.done).length,total:ts.length};}
+/* 分段圆环：每目标一段弧，弧内填充=该目标进度，中心=整体平均 */
+function segRing(gs,size){size=size||78;
+  const n=gs.length;if(!n)return ring(0,size);
+  const w=Math.max(6,size*0.13),r=(size-w)/2,C=2*Math.PI*r;
+  const gap=n>1?Math.min(5,C*0.012):0;
+  let arcs="";
+  gs.forEach((g,i)=>{
+    const L=C/n-gap,p=clamp(goalProg(g.id),0,100),off=-(i*C/n+gap/2),c=goalColor(g);
+    arcs+='<circle cx="'+size/2+'" cy="'+size/2+'" r="'+r+'" fill="none" style="stroke:'+c+';opacity:.16" stroke-width="'+w+'" stroke-dasharray="'+L+' '+(C-L)+'" stroke-dashoffset="'+off+'"/>';
+    arcs+='<circle cx="'+size/2+'" cy="'+size/2+'" r="'+r+'" fill="none" style="stroke:'+c+'" stroke-width="'+w+'" stroke-dasharray="'+(L*p/100)+' '+(C-L*p/100)+'" stroke-dashoffset="'+off+'"/>';});
+  const overall=gs.reduce((a,g)=>a+goalProg(g.id),0)/n;
+  return '<span class="ring" style="width:'+size+'px;height:'+size+'px;font-size:'+Math.round(size*0.28)+'px">'+
+    '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" style="transform:rotate(-90deg)">'+arcs+'</svg>'+
+    '<span class="val"><b>'+Math.round(overall)+'</b><span style="font-size:.55em">%</span></span></span>';}
 function sparkline(vals,w,h,color){w=w||110;h=h||30;
   if(vals.length<2)return '<span class="small muted">复盘 2 次后出现趋势</span>';
   const pts=vals.map((v,i)=>{const x=(i/(vals.length-1))*(w-4)+2,y=h-2-(clamp(v,0,100)/100)*(h-4);return x.toFixed(1)+","+y.toFixed(1);});
@@ -564,6 +590,7 @@ function viewSum(){
     '<div class="stat"><div class="n"><span class="em">⏱</span>'+ongoing.length+'</div><div class="l">进行中目标</div></div>'+
     '<div class="stat"><div class="n"><span class="em" style="color:var(--red)">🗂</span>'+todayTasks+'</div><div class="l">今日任务</div></div>'+
   '</div>'+
+  '<div class="card motto" data-act="motto">'+(S.motto&&S.motto.text?'❝ '+esc(S.motto.text):'<span class="muted">＋ 写一句最近的宣言，贴在摘要顶部</span>')+'</div>'+
   quarterCard()+weekStripCard()+dashCard()+
   '<div class="goal-grid">'+Object.values(S.goals).filter(g=>!g.deleted&&!g.archived)
     .sort((a,b)=>(goalStatus(a)==="进行中"?-1:1)-(goalStatus(b)==="进行中"?-1:1))
@@ -579,7 +606,7 @@ function quarterCard(){
   const checked=new Set(Object.values(S.records).filter(r=>!r.deleted&&r.date>=weekAgo&&gs.some(g=>g.id===r.goalId)).map(r=>r.goalId)).size;
   const pace=tp<=0?{label:"起步",cls:""}:overall>=tp-8?{label:"跟上节奏",cls:"ok"}:overall>=tp-25?{label:"落后节奏",cls:"warn"}:{label:"明显滞后",cls:"bad"};
   const risky=gs.map(g=>({g,p:goalPace(g),st:recordStale(g)})).filter(x=>x.p.cls==="bad"||x.p.cls==="warn"||x.st);
-  return '<div class="card"><div class="qcard">'+ring(overall,78)+
+  return '<div class="card"><div class="qcard">'+segRing(gs,78)+
     '<div class="qmeta"><div class="row"><b style="font-size:15px">'+q.label+'</b><span class="chip '+pace.cls+'">'+pace.label+'</span>'+
     '<span class="small muted" style="margin-left:auto">剩 '+Math.max(0,dayDiff(new Date(),pdate(q.end)))+' 天</span></div>'+
     '<div class="prow mt8"><span class="small muted" style="width:52px">时间</span><div class="pbar time"><i style="width:'+tp+'%"></i></div><span class="pct">'+Math.round(tp)+'%</span></div>'+
@@ -612,7 +639,7 @@ function weekStripCard(){
     if(e<s)return;
     const left=s/9*100,w=(e-s+1)/9*100;
     bars+='<div style="position:absolute;left:'+left+'%;width:'+w+'%;top:'+(i*44)+'px">'+
-      '<div class="gbar" data-drag-goal="'+g.id+'" data-open-goal="'+g.id+'" style="width:100%">'+esc(g.title)+'<span class="hint">⇄</span></div></div>';});
+      '<div class="gbar" data-drag-goal="'+g.id+'" data-open-goal="'+g.id+'" style="width:100%;background:linear-gradient(90deg,'+goalColor(g)+',color-mix(in srgb,'+goalColor(g)+' 78%,#fff 10%))">'+esc(g.title)+'<span class="hint">⇄</span></div></div>';});
   return '<div class="card wk"><div class="mo">'+(t.getMonth()+1)+'月</div><div class="days">'+
     days.map(d=>{const ds=dstr(d);return '<div class="d '+(ds===dstr()?"today":"")+'">'+(ds===dstr()?"今天":d.getDate())+'</div>';}).join("")+
     '</div><div class="todayline" style="left:calc('+(todayCol+0.5)+'/9*100% - 1px)"></div>'+
@@ -621,24 +648,25 @@ function weekStripCard(){
 function goalCard(g){
   const p=goalProg(g.id),pace=goalPace(g),open=UI.openGoal===g.id,ss=subsOf(g.id),stale=recordStale(g);
   const lc=lastRecord(g.id);
+  const ts=goalTaskStats(g.id),gc=goalColor(g);
   return '<div class="card goal-card"><div class="gc-head" data-open-card="'+g.id+'">'+
-    '<div class="t" style="font-size:17px;font-weight:800">'+esc(g.title)+'</div>'+
+    '<div class="t" style="font-size:17px;font-weight:800">'+(ts.total?'<span class="tcount">'+ts.done+'/'+ts.total+'</span>':'')+esc(g.title)+'</div>'+
     '<div class="date">📅 '+esc(g.start||"未计划")+(g.end?" - "+esc(g.end):"")+
-      (g.groupId&&S.groups[g.groupId]&&!S.groups[g.groupId].deleted?'<span class="chip">📁 '+esc(S.groups[g.groupId].name)+'</span>':'')+'</div>'+
-    '<div class="prow"><div class="pbar"><i style="width:'+p+'%"></i></div><span class="pct">'+Math.round(p)+'%</span>'+
+      (g.groupId&&S.groups[g.groupId]&&!S.groups[g.groupId].deleted?'<span class="chip">'+(S.groups[g.groupId].icon||"📁")+' '+esc(S.groups[g.groupId].name)+'</span>':'')+'</div>'+
+    '<div class="prow"><div class="pbar"><i style="width:'+p+'%;background:linear-gradient(90deg,'+gc+',color-mix(in srgb,'+gc+' 70%,#000 8%))"></i></div><span class="pct">'+Math.round(p)+'%</span>'+
     '<span class="chip '+pace.cls+'">'+pace.label+'</span>'+
     '<span class="chev" data-chev="'+g.id+'">'+(open?"⌃":"⌄")+'</span></div></div>'+
-    (open?'<div class="sg-grid">'+ss.map(sgCard).join("")+
+    (open?'<div class="sg-grid">'+ss.map(s=>sgCard(s,gc)).join("")+
       '<div class="sg" style="background:var(--card2);color:var(--muted);border:1.5px dashed var(--line);justify-content:center;align-items:center;display:grid;text-align:center" data-act="new-sub" data-id="'+g.id+'">＋<br>拆分目标</div></div>'+
       '<div class="small muted mt8" style="display:flex;align-items:center;gap:8px">上次复盘 '+(lc?lc.date.slice(5).replace("-","/"):"从未")+
       (stale?'<span class="chip bad">待更新</span>':'')+
-      '<button class="btn small primary" style="margin-left:auto" data-act="new-record" data-id="'+g.id+'">✍️ 写复盘</button></div>':
+      '<button class="btn small primary" style="margin-left:auto;background:linear-gradient(135deg,'+gc+',color-mix(in srgb,'+gc+' 75%,#000 10%))" data-act="new-record" data-id="'+g.id+'">✍️ 写复盘</button></div>':
       '<div class="small muted mt8">'+ss.length+' 个拆分目标 · '+(lc?"复盘于 "+lc.date.slice(5).replace("-","/"):"还没复盘过")+(stale?' · <span style="color:var(--red)">该复盘了</span>':'')+'</div>')+
   '</div>';
 }
-function sgCard(s){
-  const ty=sgType(s),meta=SG_TYPES[ty];
-  return '<div class="sg" data-edit-sub="'+s.id+'"><span class="sgp">'+meta.icon+' '+meta.label+'</span><div class="mini">✎</div>'+
+function sgCard(s,c){
+  const ty=sgType(s),meta=SG_TYPES[ty];c=c||goalColor(S.goals[s.goalId]);
+  return '<div class="sg" data-edit-sub="'+s.id+'" style="background:linear-gradient(160deg,color-mix(in srgb,'+c+' 72%,#fff 12%),'+c+')"><span class="sgp">'+meta.icon+' '+meta.label+'</span><div class="mini">✎</div>'+
     '<div class="t">'+esc(s.title)+'</div>'+
     '<div class="b"><span>'+(ty==="count"?"⭐":ty==="decrease"?"↘":ty==="bool"?(Number(s.current)>=1?"✅":"⬜"):"")+'</span>'+
     '<span class="cnt">'+sgDisplay(s)+'</span>'+
@@ -653,7 +681,7 @@ function viewLib(){
   return titleBar("目标库",'<button class="circbtn" data-act="new-group">＋</button>')+
   '<div class="sect">目标组</div><div class="grouplist">'+
     '<div class="grow" data-group="__all"><span>🎯</span>全部目标<span class="cnt">'+all+'</span><span class="gt">›</span></div>'+
-    groups.map(x=>'<div class="grow" data-group="'+x.id+'"><span>📁</span>'+esc(x.name)+'<span class="cnt">'+goalsIn(x.id).length+'</span><span class="gt">›</span></div>').join("")+
+    groups.map(x=>'<div class="grow" data-group="'+x.id+'"><span>'+(x.icon||"📁")+'</span>'+esc(x.name)+'<span class="cnt">'+goalsIn(x.id).length+'</span><button class="iconbtn" style="width:28px;height:28px;font-size:12px;color:var(--muted)" data-act="edit-group" data-id="'+x.id+'">✎</button><span class="gt">›</span></div>').join("")+
   '</div>';}
 function viewGroup(gid){
   const isAll=gid==="__all";
@@ -722,15 +750,20 @@ function viewToday(){
 function taskRow(t){
   const g=t.goalId&&S.goals[t.goalId]&&!S.goals[t.goalId].deleted?S.goals[t.goalId]:null;
   const imp=g&&t.subgoalId?goalImpactPct(g.id,t.subgoalId,t.inc||1):0;
+  const c=g?goalColor(g):null;
   const meta=[];const overdue=t.due&&t.due<dstr()&&!t.done;
-  if(t.due){meta.push(WD[pdate(t.due).getDay()]);meta.push(relDay(t.due));if(t.time)meta.push(t.time);}
-  return '<div class="task '+(t.done?"done":"")+'" data-task-open="'+t.id+'">'+
-    '<button class="cb" data-toggle="'+t.id+'">'+(t.done?"✓":"")+'</button>'+
-    '<div class="bd"><div class="tt">'+esc(t.title)+(t.repeat&&t.repeat!=="none"?'<span class="rep">🔁 '+REPEATS[t.repeat]+'</span>':'')+'</div>'+
+  if(t.due){meta.push(WD[pdate(t.due).getDay()]);meta.push(relDay(t.due));}
+  if(t.done&&t.timeStart)meta.push(t.timeStart+(t.timeEnd?" - "+t.timeEnd:""));
+  else if(t.time)meta.push(t.time);
+  const repTag=t.repeat&&t.repeat!=="none"?'<span class="rep">🔁 '+REPEATS[t.repeat]+(Number(t.seq)>1?"·第"+t.seq+"次":"")+'</span>':'';
+  return '<div class="task '+(t.done?"done":"")+'" data-task-open="'+t.id+'"'+(c&&!t.done?' style="background:color-mix(in srgb,'+c+' 9%,var(--card))"':'')+'>'+
+    '<button class="cb" data-toggle="'+t.id+'"'+(c?' style="border-color:'+c+';'+(t.done?"background:"+c:"")+'"':'')+'>'+(t.done?"✓":"")+'</button>'+
+    '<div class="bd"><div class="tt"'+(c&&!t.done?' style="color:'+c+'"':'')+'>'+esc(t.title)+repTag+'</div>'+
     (meta.length?'<div class="meta '+(overdue?"overdue":"")+'">'+meta.join(",")+(overdue?" · 逾期":"")+'</div>':'<div class="meta">未计划</div>')+
+    (t.note?'<div class="meta">备注：'+esc(t.note)+'</div>':'')+
     (g?'<div class="link">'+esc(g.title)+'<span class="imp">⬆ '+fmtImp(imp)+'</span></div>':'')+
     '</div>'+
-    (g&&t.subgoalId?'<div class="star">⭐<span class="badge">+'+fmtNum(t.inc||1)+'</span></div>':'')+
+    (g&&t.subgoalId?'<div class="star">⭐<span class="badge"'+(c?' style="background:'+c+'"':'')+'>+'+fmtNum(t.inc||1)+'</span></div>':'')+
   '</div>';
 }
 function fmtImp(p){return (p>=10?Math.round(p):Math.round(p*100)/100)+"%";}
@@ -801,12 +834,16 @@ function groupForm(gr){
   gr=gr||{};
   openModal('<h3>'+(gr.id?"重命名目标组":"新建目标组")+'<button class="x" data-act="close">✕</button></h3>'+
     '<label class="f">名称</label><input type="text" id="gp-name" value="'+esc(gr.name||"")+'" placeholder="如 求职 / 健康 / 学习">'+
+    '<label class="f">图标</label><input type="text" id="gp-icon" maxlength="2" value="'+esc(gr.icon||"")+'" placeholder="📁" style="width:80px">'+
+    '<div class="tsegs mt8" id="gp-ic-chips">'+GROUP_ICONS.map(x=>'<button data-gic="'+x+'">'+x+'</button>').join("")+'</div>'+
     '<div class="row mt12">'+(gr.id?'<button class="btn danger" id="gp-del">删除组</button>':'')+
     '<button class="btn" data-act="close" style="flex:1">取消</button><button class="btn primary" id="gp-save" style="flex:2">保存</button></div>');
+  $("#gp-ic-chips").onclick=e=>{const b=e.target.closest("[data-gic]");if(!b)return;$("#gp-icon").value=b.getAttribute("data-gic");};
   $("#gp-save").onclick=()=>{const name=$("#gp-name").value.trim();if(!name){toast("名称不能为空");return;}
+    const icon=$("#gp-icon").value.trim();
     const id=gr.id||uid();
-    if(S.groups[id])S.groups[id]=Object.assign(S.groups[id],{name,updatedAt:now(),deleted:false});
-    else S.groups[id]={id,name,createdAt:now(),updatedAt:now(),deleted:false};
+    if(S.groups[id])S.groups[id]=Object.assign(S.groups[id],{name,icon,updatedAt:now(),deleted:false});
+    else S.groups[id]={id,name,icon,createdAt:now(),updatedAt:now(),deleted:false};
     save();closeModal();toast("已保存");};
   if(gr.id)$("#gp-del").onclick=()=>{const id=gr.id;S.groups[id].deleted=true;S.groups[id].updatedAt=now();
     goalsIn(gr.id).forEach(g=>{g.groupId=null;g.updatedAt=now();});save();closeModal();toast("组已删除（目标保留）");};
@@ -841,7 +878,7 @@ function goalForm(g,preGroup){
     if(start&&end&&start>end){toast("结束早于开始");return;}
     const id=g.id||uid();
     const rec={id,title,start,end,groupId:$("#go-group").value||null};
-    if(isNew)S.goals[id]=Object.assign(rec,{createdAt:now(),updatedAt:now(),deleted:false});
+    if(isNew)S.goals[id]=Object.assign(rec,{color:OBJ_COLORS[Object.keys(S.goals).length%OBJ_COLORS.length],createdAt:now(),updatedAt:now(),deleted:false});
     else S.goals[id]=Object.assign(S.goals[id],rec,{updatedAt:now()});
     const keep=new Set();
     subs.forEach(s=>{if(!s.title.trim())return;keep.add(s.id);
@@ -900,13 +937,13 @@ function taskForm(t){
   openModal('<h3>'+(isNew?"新建任务":"编辑任务")+'<button class="x" data-act="close">✕</button></h3>'+
     '<label class="f">任务标题</label><input type="text" id="tk-title" value="'+esc(t.title||"")+'" placeholder="如 AI agent落地流程">'+
     '<div class="row" style="gap:10px"><div style="flex:1"><label class="f">日期（留空=未计划）</label><input type="date" id="tk-due" value="'+esc(t.due||UI.pickToday||"")+'"></div>'+
-    '<div style="flex:1"><label class="f">时间（可选）</label><input type="time" id="tk-time" value="'+esc(t.time||"")+'"></div></div>'+
-    '<label class="f">重复（完成后自动生成下一次）</label><div class="tsegs" id="tk-rep">'+
-      Object.keys(REPEATS).map(k=>'<button data-rep="'+k+'" class="'+((t.repeat||"none")===k?"on":"")+'">'+REPEATS[k]+'</button>').join("")+'</div>'+
+    '<div style="flex:1"><label class="f">重复（完成后自动生成下一次）</label><div class="tsegs" id="tk-rep">'+
+      Object.keys(REPEATS).map(k=>'<button data-rep="'+k+'" class="'+((t.repeat||"none")===k?"on":"")+'">'+REPEATS[k]+'</button>').join("")+'</div></div></div>'+
     '<label class="f">关联目标（完成后推进拆分目标）</label><select id="tk-goal"><option value="">（不关联）</option>'+
       goals.map(g=>'<option value="'+g.id+'" '+(g.id===t.goalId?"selected":"")+'>'+esc(g.title)+'</option>').join("")+'</select>'+
     '<label class="f">推进哪个拆分目标</label><select id="tk-sub"></select>'+
     '<label class="f">完成时推进量（计数/百分比=+N，递减=−N，是否=完成）</label><input type="number" id="tk-inc" min="1" step="1" value="'+Number(t.inc||1)+'" style="width:110px">'+
+    '<label class="f">备注（可选，如执行细节/素材）</label><input type="text" id="tk-note" value="'+esc(t.note||"")+'" placeholder="例：鱼虾/蛋白粉">'+
     '<div class="row mt12">'+(isNew?'':'<button class="btn danger" id="tk-del">删除</button>')+
     '<button class="btn" data-act="close" style="flex:1">取消</button><button class="btn primary" id="tk-save" style="flex:2">保存</button></div>');
   const fillSubs=()=>{const gid=$("#tk-goal").value;const ss=gid?subsOf(gid):[];
@@ -920,7 +957,7 @@ function taskForm(t){
     const due=$("#tk-due").value||"";
     if(rep!=="none"&&!due){toast("重复任务需要先选日期");return;}
     const id=t.id||uid();
-    const rec={id,title,due,time:$("#tk-time").value||"",goalId:$("#tk-goal").value||null,
+    const rec={id,title,due,time:t.time||"",note:$("#tk-note").value.trim(),goalId:$("#tk-goal").value||null,
       subgoalId:$("#tk-goal").value&&$("#tk-sub").value?$("#tk-sub").value:null,inc:Math.max(1,Number($("#tk-inc").value)||1),repeat:rep};
     if(isNew)S.tasks[id]=Object.assign(rec,{done:false,createdAt:now(),updatedAt:now(),deleted:false});
     else S.tasks[id]=Object.assign(S.tasks[id],rec,{updatedAt:now()});
@@ -943,16 +980,36 @@ function toggleTask(id){
   if(t.done&&t.repeat&&t.repeat!=="none"&&t.due){
     const alive=t.spawnId&&S.tasks[t.spawnId]&&!S.tasks[t.spawnId].deleted;
     if(!alive){const nid=uid();
-      S.tasks[nid]={id:nid,title:t.title,due:nextDue(t.due,t.repeat),time:t.time||"",goalId:t.goalId||null,subgoalId:t.subgoalId||null,
-        inc:Number(t.inc)||1,repeat:t.repeat,spawnedBy:t.id,done:false,createdAt:now(),updatedAt:now(),deleted:false};
+      S.tasks[nid]={id:nid,title:t.title,due:nextDue(t.due,t.repeat),time:"",note:t.note||"",goalId:t.goalId||null,subgoalId:t.subgoalId||null,
+        inc:Number(t.inc)||1,repeat:t.repeat,seq:(Number(t.seq)||1)+1,spawnedBy:t.id,done:false,createdAt:now(),updatedAt:now(),deleted:false};
       t.spawnId=nid;
-      toast("🔁 下一次已生成："+S.tasks[nid].due.slice(5).replace("-","/"));
     }
-  }else if(!t.done&&t.spawnId){
-    const sp=S.tasks[t.spawnId];
-    if(sp&&!sp.deleted&&!sp.done){sp.deleted=true;sp.updatedAt=now();}
-    t.spawnId=null;}
-  save();}
+  }else if(!t.done){
+    t.timeStart="";t.timeEnd="";
+    if(t.spawnId){const sp=S.tasks[t.spawnId];
+      if(sp&&!sp.deleted&&!sp.done){sp.deleted=true;sp.updatedAt=now();}
+      t.spawnId=null;}}
+  save();
+  if(t.done)timeLogForm(id);}
+/* 完成时记录实际起止时间（可跳过） */
+function timeLogForm(tid){const t=S.tasks[tid];if(!t||!t.done)return;
+  openModal('<h3>记录用时<button class="x" data-act="close">✕</button></h3>'+
+    '<div class="small muted mb8">「'+esc(t.title)+'」已完成 ✓ · 起止时间为可选，跳过也行</div>'+
+    '<div class="row" style="gap:10px"><div style="flex:1"><label class="f">开始时间</label><input type="time" id="tl-s" value="'+esc(t.timeStart||"")+'"></div>'+
+    '<div style="flex:1"><label class="f">结束时间</label><input type="time" id="tl-e" value="'+esc(t.timeEnd||"")+'"></div></div>'+
+    '<div class="row mt12"><button class="btn" data-act="close" style="flex:1">跳过</button><button class="btn primary" id="tl-save" style="flex:1">保存</button></div>');
+  $("#tl-save").onclick=()=>{const s=$("#tl-s").value,e=$("#tl-e").value;
+    if(s&&e&&e<=s){toast("结束需晚于开始");return;}
+    t.timeStart=s;t.timeEnd=e;t.updatedAt=now();save();closeModal();toast("已记录用时");};}
+/* 摘要宣言 */
+function mottoForm(){
+  openModal('<h3>我的宣言<button class="x" data-act="close">✕</button></h3>'+
+    '<div class="small muted">贴在摘要顶部的一句话，提醒自己为什么出发</div>'+
+    '<label class="f">内容</label><textarea id="mt-text" placeholder="例：最近的生活太疲惫了！我要把节奏拿回来。">'+esc((S.motto&&S.motto.text)||"")+'</textarea>'+
+    '<div class="row mt12"><button class="btn danger" id="mt-clear">清除</button><button class="btn" data-act="close" style="flex:1">取消</button><button class="btn primary" id="mt-save" style="flex:1.5">保存</button></div>');
+  $("#mt-save").onclick=()=>{const text=$("#mt-text").value.trim();if(!text){toast("写点什么吧");return;}
+    S.motto={text,updatedAt:now()};save();closeModal();toast("宣言已更新");};
+  $("#mt-clear").onclick=()=>{S.motto={text:"",updatedAt:now()};save();closeModal();toast("已清除");};}
 function bumpSub(id){const s=S.subgoals[id];if(!s)return;
   advanceSub(s,1,sgType(s)==="bool"&&Number(s.current)>=1?-1:1);save();}
 function recordForm(gid){
@@ -1030,7 +1087,7 @@ document.body.addEventListener("click",e=>{
   const card=e.target.closest("[data-open-card]");
   if(card){UI.view={name:"goal",id:card.getAttribute("data-open-card")};saveUI();render();return;}
   const grp=e.target.closest("[data-group]");
-  if(grp){UI.view={name:"group",id:grp.getAttribute("data-group")};UI.gtab="进行中";saveUI();render();return;}
+  if(grp&&!e.target.closest("[data-act]")){UI.view={name:"group",id:grp.getAttribute("data-group")};UI.gtab="进行中";saveUI();render();return;}
   const gtab=e.target.closest("[data-gtab]");
   if(gtab){UI.gtab=gtab.getAttribute("data-gtab");render();return;}
   const ttab=e.target.closest("[data-ttab]");
@@ -1052,6 +1109,7 @@ document.body.addEventListener("click",e=>{
     case"close":closeModal();break;
     case"seed":confirmModal("载入示例（面试进展）？将与现有数据共存。",()=>{S=mergeState(S,seedDemo()).merged;save();toast("示例已载入");});break;
     case"new-group":groupForm();break;
+    case"edit-group":e.stopPropagation();groupForm(S.groups[id]);break;
     case"new-goal":goalForm(null,act.getAttribute("data-g")||null);break;
     case"edit-goal":goalForm(S.goals[id]);break;
     case"new-sub":{const gid=id||(UI.view&&UI.view.id);
@@ -1073,6 +1131,7 @@ document.body.addEventListener("click",e=>{
           createdAt:now(),updatedAt:now(),deleted:false};
         UI.openGoal=gid;save();closeModal();toast("已添加");};break;}
     case"new-record":recordForm(id);break;
+    case"motto":mottoForm();break;
     case"archive-goal":{const g=S.goals[id];g.archived=!g.archived;g.updatedAt=now();save();
       toast(g.archived?"已归档，可在目标库「已归档」找回":"已恢复为进行中");break;}
     case"del-goal":confirmModal("删除目标「"+esc(S.goals[id].title)+"」及其拆分目标与复盘？任务将解除关联。",()=>deleteGoal(id));break;
@@ -1138,6 +1197,9 @@ function applyTheme(){document.documentElement.setAttribute("data-theme",UI.dark
 (function(){if(UI.dark===undefined)UI.dark=matchMedia("(prefers-color-scheme: dark)").matches;applyTheme();})();
 if(isEmpty()&&UI.seeded===undefined){S=seedDemo();UI.seeded=true;saveUI();
   try{localStorage.setItem(LS_STATE,JSON.stringify(S));}catch(e){}}
+/* 迁移：为无颜色的历史目标补色（一次性，不触发推送） */
+(function(){let ch=false;Object.values(S.goals).forEach((g,i)=>{if(!g.deleted&&!g.color){g.color=OBJ_COLORS[i%OBJ_COLORS.length];g.updatedAt=now();ch=true;}});
+  if(ch){S.meta.updatedAt=now();try{localStorage.setItem(LS_STATE,JSON.stringify(S));}catch(e){}}})();
 function init(){render();bootstrapTokenFromHash();if(syncCfg().token)syncPull(true);}
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&syncCfg().token)syncPull(true);});
 window.addEventListener("online",()=>{if(syncCfg().token)syncPull(true);});
