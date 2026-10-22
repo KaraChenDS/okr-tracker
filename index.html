@@ -281,7 +281,29 @@ const now=()=>Date.now();
 const dstr=d=>{const x=d||new Date();return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");};
 const pdate=s=>{if(!s)return null;const p=String(s).split("-").map(Number);return new Date(p[0],p[1]-1,p[2]);};
 const WD=["周日","周一","周二","周三","周四","周五","周六"];
-const REPEATS={none:"不重复",weekly:"每周",biweekly:"每两周",monthly:"每月",yearly:"每年"};
+const REPEATS={none:"单次",weekly:"每周",biweekly:"每两周",monthly:"每月",yearly:"每年"};
+const METRICS={count:{label:"计数",icon:"⭐",defInc:1},percent:{label:"百分比",icon:"%",defInc:5},bool:{label:"是否",icon:"✓",defInc:1}};
+/* ---------- 周期配额任务 ---------- */
+function isCyc(t){return t.cycle&&t.cycle!=="none";}
+function taskQuota(t){return Math.max(1,Number(t.quota)||1);}
+function taskMarks(t){return Array.isArray(t.marks)?t.marks:[];}
+function cycEnd(start,cycle){const d=pdate(start)||new Date();
+  if(cycle==="weekly")d.setDate(d.getDate()+7);
+  else if(cycle==="biweekly")d.setDate(d.getDate()+14);
+  else{const day=d.getDate();d.setDate(1);
+    if(cycle==="monthly")d.setMonth(d.getMonth()+1);else d.setFullYear(d.getFullYear()+1);
+    const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();d.setDate(Math.min(day,last));/* 月末钳制：1/31→2/28 */}
+  return dstr(d);}
+function rollTask(t){if(!isCyc(t)||!t.cycleStart)return false;let ch=false,guard=0;
+  while(cycEnd(t.cycleStart,t.cycle)<=dstr()&&guard++<500){t.cycleStart=cycEnd(t.cycleStart,t.cycle);t.marks=[];ch=true;}
+  return ch;}
+function rollAll(){let ch=false;Object.values(S.tasks).forEach(t=>{if(!t.deleted&&rollTask(t))ch=true;});
+  if(ch){S.meta.updatedAt=now();try{localStorage.setItem(LS_STATE,JSON.stringify(S));}catch(e){}queuePush();}}
+function cycMet(t){return isCyc(t)&&taskMarks(t).length>=taskQuota(t);}
+function taskActive(t){return isCyc(t)?!cycMet(t):!t.done;}
+function taskDoneAt(t){if(isCyc(t)){const ms=taskMarks(t);return cycMet(t)&&ms.length?ms[ms.length-1].at:0;}return t.doneAt||0;}
+function taskCovers(t,ds){if(isCyc(t))return !!t.cycleStart&&ds>=t.cycleStart&&ds<cycEnd(t.cycleStart,t.cycle);return t.due===ds;}
+function taskMetric(t){return t.metric||"count";}
 const OBJ_COLORS=["#7b7bea","#e8590c","#1c7ed6","#2f9e63","#e03131","#e6a700","#0ca678","#d6336c","#5f3dc4"];
 const GROUP_ICONS=["📁","","💪","📚","💰","🎨","🌙","🔥","🏠","💼","🎮","✈️","🎸","🥗"];
 function nextDue(due,rep){const d=pdate(due);if(!d||!rep||rep==="none")return due;
@@ -373,7 +395,7 @@ function shiftGoal(id,days){const g=S.goals[id];if(!g||g.deleted||!g.start||!g.e
 function recordStreak(){const ds=new Set(Object.values(S.records).filter(r=>!r.deleted).map(r=>r.date));
   if(!ds.size)return 0;let d=new Date();if(!ds.has(dstr(d)))d=new Date(d.getTime()-864e5);
   let n=0;while(ds.has(dstr(d))){n++;d=new Date(d.getTime()-864e5);}return n;}
-function openTasks(){return Object.values(S.tasks).filter(t=>!t.deleted&&!t.done);}
+function openTasks(){return Object.values(S.tasks).filter(t=>!t.deleted&&taskActive(t));}
 function isDone(t){return !!t.done;}
 function quarterOf(d){d=d||new Date();const q=Math.floor(d.getMonth()/3)+1;const y=d.getFullYear();
   return{label:y+" Q"+q,start:y+"-"+String((q-1)*3+1).padStart(2,"0")+"-01",end:y+"-"+String(q*3).padStart(2,"0")+"-"+dstr(new Date(y,q,0)).slice(8)};}
@@ -387,7 +409,14 @@ function seedDemo(){
   const sg=(t,extra)=>{const id=uid();st.subgoals[id]=Object.assign({id,goalId:gid,title:t,type:"count",current:0,target:10,createdAt:now(),updatedAt:now(),deleted:false},extra||{});return id;};
   const s1=sg("产出作品集"), s2=sg("把所有项目全盘复盘"), s3=sg("能用英文口述项目经验");
   const tid=uid();
-  st.tasks[tid]={id:tid,title:"AI agent落地流程",due:dstr(),time:"18:25",goalId:gid,subgoalId:s1,inc:1,done:false,createdAt:now(),updatedAt:now(),deleted:false};
+  st.tasks[tid]={id:tid,title:"AI agent落地流程",due:dstr(),time:"18:25",goalId:gid,subgoalId:s1,inc:1,metric:"count",cycle:"none",done:false,createdAt:now(),updatedAt:now(),deleted:false};
+  /* 周期配额示例：每周力量训练 3 次（用户例） */
+  const gid2=uid();
+  st.goals[gid2]={id:gid2,groupId:null,title:"健康减脂",color:"#2f9e63",start:dstr(),end:dstr(new Date(now()+40*864e5)),createdAt:now(),updatedAt:now(),deleted:false};
+  const sid2=uid();
+  st.subgoals[sid2]={id:sid2,goalId:gid2,title:"每周力量训练≥3次，坚持12周",type:"count",current:0,target:12,createdAt:now(),updatedAt:now(),deleted:false};
+  const tid2=uid();
+  st.tasks[tid2]={id:tid2,title:"力量训练",cycle:"weekly",cycleStart:dstr(),quota:3,metric:"count",inc:1,goalId:gid2,subgoalId:sid2,marks:[],note:"练腿/硬拉/卧推任选三",done:false,createdAt:now(),updatedAt:now(),deleted:false};
   return st;
 }
 function isEmpty(){return !Object.values(S.goals).some(g=>!g.deleted);}
@@ -583,7 +612,7 @@ function viewSum(){
   const t=dstr();
   const addedToday=COLL.reduce((a,k)=>a+Object.values(S[k]).filter(x=>!x.deleted&&x.createdAt&&dstr(new Date(x.createdAt))===t).length,0);
   const ongoing=Object.values(S.goals).filter(g=>!g.deleted&&goalStatus(g)==="进行中");
-  const todayTasks=openTasks().filter(x=>x.due===t).length;
+  const todayTasks=openTasks().filter(x=>taskCovers(x,t)).length;
   return titleBar("摘要","")+
   '<div class="stats">'+
     '<div class="stat"><div class="n"><span class="em">📝</span>'+addedToday+'</div><div class="l">今日添加记录</div></div>'+
@@ -714,56 +743,71 @@ function viewGoalDetail(gid){
 
 /* ---------- 任务 ---------- */
 function viewTasks(){
+  rollAll();
   const tab=UI.ttab||"未完成";
   const all=Object.values(S.tasks).filter(t=>!t.deleted);
+  const t0=dstr();
   let list;
-  if(tab==="未完成")list=all.filter(t=>!t.done&&t.due);
-  else if(tab==="未计划")list=all.filter(t=>!t.done&&!t.due);
-  else list=all.filter(t=>t.done).sort((a,b)=>(b.doneAt||0)-(a.doneAt||0));
+  if(tab==="未完成")list=all.filter(t=>taskActive(t)&&(isCyc(t)?true:t.due));
+  else if(tab==="未计划")list=all.filter(t=>taskActive(t)&&!isCyc(t)&&!t.due);
+  else list=all.filter(t=>!taskActive(t)).sort((a,b)=>taskDoneAt(b)-taskDoneAt(a));
   const groups={};
-  if(tab==="未完成"){const t=dstr();
-    list.sort((a,b)=>a.due.localeCompare(b.due));
-    list.forEach(x=>{const k=x.due<t?"已逾期":x.due===t?"今日":x.due===dstr(new Date(now()+864e5))?"明天":"之后";(groups[k]=groups[k]||[]).push(x);});
+  if(tab==="未完成"){
+    list.forEach(x=>{
+      if(isCyc(x)){const k=x.cycleStart>t0?"之后":"今日";(groups[k]=groups[k]||[]).push(x);return;}
+      const k=x.due<t0?"已逾期":x.due===t0?"今日":x.due===dstr(new Date(now()+864e5))?"明天":"之后";
+      (groups[k]=groups[k]||[]).push(x);});
+    Object.values(groups).forEach(arr=>arr.sort((a,b)=>(isCyc(a)?0:1)-(isCyc(b)?0:1)||String(a.time||"99").localeCompare(String(b.time||"99"))));
   }else if(tab==="已结束"){
-    list.forEach(x=>{const k=x.doneAt?dstr(new Date(x.doneAt)):"完成";(groups[k]=groups[k]||[]).push(x);});
+    list.forEach(x=>{const at=taskDoneAt(x);const k=at?dstr(new Date(at)):"完成";(groups[k]=groups[k]||[]).push(x);});
   }else groups[""]=list;
   const order=tab==="未完成"?["已逾期","今日","明天","之后"]:Object.keys(groups).sort().reverse();
   return titleBar("全部任务",'<button class="circbtn" data-nav="today">📅</button>')+
   '<div class="seg">'+["未完成","未计划","已结束"].map(k=>'<button data-ttab="'+k+'" class="'+(tab===k?"on":"")+'">'+k+'</button>').join("")+'</div>'+
   (order.filter(k=>groups[k]&&groups[k].length).map(k=>
-    '<div class="tgroup '+(k==="已逾期"?"overdue":"")+'">'+(tab==="未完成"?k+" "+groups[k].length:(tab==="已结束"?(k===dstr()?"今日":relDay(k))+" "+groups[k].length:"未计划 "+groups[k].length))+'</div>'+
+    '<div class="tgroup '+(k==="已逾期"?"overdue":"")+'">'+(tab==="未完成"?k+" "+groups[k].length:(tab==="已结束"?(k===t0?"今日":relDay(k))+" "+groups[k].length:"未计划 "+groups[k].length))+'</div>'+
     groups[k].map(taskRow).join("")).join("")||'<div class="card"><div class="empty">「'+tab+'」暂无任务<br><button class="btn small mt8" data-nav="add-task">＋ 去添加</button></div></div>');
 }
 function viewToday(){
+  rollAll();
   const t=new Date();const days=[];
   const mon=new Date(t.getFullYear(),t.getMonth(),t.getDate()-((t.getDay()+6)%7));
   for(let i=0;i<7;i++)days.push(new Date(mon.getFullYear(),mon.getMonth(),mon.getDate()+i));
   UI.pick=UI.pick||dstr();
-  const list=openTasks().filter(x=>x.due===UI.pick).sort((a,b)=>(a.time||"99").localeCompare(b.time||"99"));
-  const doneCnt=Object.values(S.tasks).filter(x=>!x.deleted&&x.due===UI.pick&&x.done).length;
+  const all=Object.values(S.tasks).filter(x=>!x.deleted);
+  const list=all.filter(x=>taskActive(x)&&taskCovers(x,UI.pick)).sort((a,b)=>String(a.time||"99").localeCompare(String(b.time||"99"))||a.title.localeCompare(b.title));
+  const doneList=all.filter(x=>!taskActive(x)&&taskCovers(x,UI.pick));
   return titleBar("今日任务",'<button class="circbtn" data-nav="all-task">☰</button>',false)+
-  '<div class="daystrip">'+days.map(d=>{const ds=dstr(d);const has=Object.values(S.tasks).some(x=>!x.deleted&&x.due===ds);
+  '<div class="daystrip">'+days.map(d=>{const ds=dstr(d);const has=all.some(x=>taskCovers(x,ds));
     return '<div class="day '+(ds===UI.pick?"on":"")+'" data-pick="'+ds+'"><div class="w">'+WD[d.getDay()]+'</div><div class="n">'+d.getDate()+'</div>'+(has&&ds!==UI.pick?'<div class="has"></div>':'')+'</div>';}).join("")+'</div>'+
-  '<div class="tgroup">未完成 '+list.length+(doneCnt?' · 已完成 '+doneCnt:'')+'</div>'+
-  (list.length?list.map(taskRow).join(""):'<div class="card"><div class="empty">'+(UI.pick===dstr()?"今天没有待办，休息也是进度 🌿":"这天没有任务")+'<br><button class="btn small mt8" data-nav="add-task">＋ 添加任务</button></div></div>');
+  '<div class="tgroup">未完成 '+list.length+(doneList.length?' · 已完成 '+doneList.length:'')+'</div>'+
+  (list.length?list.map(taskRow).join(""):'')+
+  (doneList.length?'<div class="tgroup">已完成 '+doneList.length+'</div>'+doneList.map(taskRow).join(""):'')+
+  (!list.length&&!doneList.length?'<div class="card"><div class="empty">'+(UI.pick===dstr()?"今天没有待办，休息也是进度 🌿":"这天没有任务")+'<br><button class="btn small mt8" data-nav="add-task">＋ 添加任务</button></div></div>':'');
 }
 function taskRow(t){
   const g=t.goalId&&S.goals[t.goalId]&&!S.goals[t.goalId].deleted?S.goals[t.goalId]:null;
-  const imp=g&&t.subgoalId?goalImpactPct(g.id,t.subgoalId,t.inc||1):0;
+  const s=subOf(t);
+  const imp=g&&s?goalImpactPct(g.id,s.id,t.inc||1):0;
   const c=g?goalColor(g):null;
-  const meta=[];const overdue=t.due&&t.due<dstr()&&!t.done;
-  if(t.due){meta.push(WD[pdate(t.due).getDay()]);meta.push(relDay(t.due));}
-  if(t.done&&t.timeStart)meta.push(t.timeStart+(t.timeEnd?" - "+t.timeEnd:""));
+  const cyc=isCyc(t),met=cyc&&cycMet(t),done=cyc?met:t.done;
+  const mk=taskMarks(t).length,q=taskQuota(t);
+  const mt=METRICS[taskMetric(t)]||METRICS.count;
+  const meta=[];const overdue=!cyc&&t.due&&t.due<dstr()&&!done;
+  if(cyc){meta.push(REPEATS[t.cycle]+"任务");meta.push("本窗口 "+t.cycleStart.slice(5).replace("-","/")+" ~ "+cycEnd(t.cycleStart,t.cycle).slice(5).replace("-","/")+"（含前）");}
+  else if(t.due){meta.push(WD[pdate(t.due).getDay()]);meta.push(relDay(t.due));}
+  if(done&&t.timeStart)meta.push(t.timeStart+(t.timeEnd?" - "+t.timeEnd:""));
   else if(t.time)meta.push(t.time);
-  const repTag=t.repeat&&t.repeat!=="none"?'<span class="rep">🔁 '+REPEATS[t.repeat]+(Number(t.seq)>1?"·第"+t.seq+"次":"")+'</span>':'';
-  return '<div class="task '+(t.done?"done":"")+'" data-task-open="'+t.id+'"'+(c&&!t.done?' style="background:color-mix(in srgb,'+c+' 9%,var(--card))"':'')+'>'+
-    '<button class="cb" data-toggle="'+t.id+'"'+(c?' style="border-color:'+c+';'+(t.done?"background:"+c:"")+'"':'')+'>'+(t.done?"✓":"")+'</button>'+
-    '<div class="bd"><div class="tt"'+(c&&!t.done?' style="color:'+c+'"':'')+'>'+esc(t.title)+repTag+'</div>'+
-    (meta.length?'<div class="meta '+(overdue?"overdue":"")+'">'+meta.join(",")+(overdue?" · 逾期":"")+'</div>':'<div class="meta">未计划</div>')+
+  const repTag=cyc?'<span class="rep">🔁 '+REPEATS[t.cycle]+(q>1?' · '+mk+'/'+q:'')+'</span>':'';
+  const cbLabel=cyc&&!done&&mk>0?'<span style="font-size:11px;font-weight:800;color:'+c+'">'+mk+'</span>':'';
+  return '<div class="task '+(done?"done":"")+'" data-task-open="'+t.id+'"'+(c&&!done?' style="background:color-mix(in srgb,'+c+' 9%,var(--card))"':'')+'>'+
+    '<button class="cb" data-toggle="'+t.id+'"'+(c?' style="border-color:'+c+';'+(done?"background:"+c:"")+'"':'')+'>'+(done?"✓":cbLabel)+'</button>'+
+    '<div class="bd"><div class="tt"'+(c&&!done?' style="color:'+c+'"':'')+'>'+esc(t.title)+repTag+'</div>'+
+    (meta.length?'<div class="meta '+(overdue?"overdue":"")+'">'+meta.join(" · ")+(overdue?" · 逾期":"")+'</div>':'<div class="meta">未计划</div>')+
     (t.note?'<div class="meta">备注：'+esc(t.note)+'</div>':'')+
-    (g?'<div class="link">'+esc(g.title)+'<span class="imp">⬆ '+fmtImp(imp)+'</span></div>':'')+
+    (g?'<div class="link">'+esc(g.title)+(s?' / '+esc(s.title):'')+'<span class="imp">⬆ '+fmtImp(imp)+'</span></div>':'')+
     '</div>'+
-    (g&&t.subgoalId?'<div class="star">⭐<span class="badge"'+(c?' style="background:'+c+'"':'')+'>+'+fmtNum(t.inc||1)+'</span></div>':'')+
+    (s?'<div class="star">'+mt.icon+'<span class="badge"'+(c?' style="background:'+c+'"':'')+'>'+(taskMetric(t)==="bool"?"✓":"+"+fmtNum(t.inc||1))+'</span></div>':'')+
   '</div>';
 }
 function fmtImp(p){return (p>=10?Math.round(p):Math.round(p*100)/100)+"%";}
@@ -932,17 +976,22 @@ function subForm(sid){
     save();closeModal();toast("已删除");};
 }
 function taskForm(t){
-  const isNew=!t;t=t||{inc:1};
+  const isNew=!t;t=t||{inc:1,cycle:"none"};
   const goals=Object.values(S.goals).filter(g=>!g.deleted);
+  let cyc=t.cycle||"none",metric=t.metric||"count";
   openModal('<h3>'+(isNew?"新建任务":"编辑任务")+'<button class="x" data-act="close">✕</button></h3>'+
-    '<label class="f">任务标题</label><input type="text" id="tk-title" value="'+esc(t.title||"")+'" placeholder="如 AI agent落地流程">'+
-    '<div class="row" style="gap:10px"><div style="flex:1"><label class="f">日期（留空=未计划）</label><input type="date" id="tk-due" value="'+esc(t.due||UI.pickToday||"")+'"></div>'+
-    '<div style="flex:1"><label class="f">重复（完成后自动生成下一次）</label><div class="tsegs" id="tk-rep">'+
-      Object.keys(REPEATS).map(k=>'<button data-rep="'+k+'" class="'+((t.repeat||"none")===k?"on":"")+'">'+REPEATS[k]+'</button>').join("")+'</div></div></div>'+
-    '<label class="f">关联目标（完成后推进拆分目标）</label><select id="tk-goal"><option value="">（不关联）</option>'+
+    '<label class="f">任务标题</label><input type="text" id="tk-title" value="'+esc(t.title||"")+'" placeholder="如 力量训练 / AI agent落地流程">'+
+    '<label class="f">周期</label><div class="tsegs" id="tk-rep">'+
+      Object.keys(REPEATS).map(k=>'<button data-rep="'+k+'" class="'+(cyc===k?"on":"")+'">'+REPEATS[k]+'</button>').join("")+'</div>'+
+    '<div class="row" style="gap:10px;margin-top:4px"><div style="flex:1"><label class="f" id="tk-due-lbl"></label><input type="date" id="tk-due" value="'+esc((cyc==="none"?(t.due||UI.pickToday||""):t.cycleStart)||"")+'"></div>'+
+    '<div style="flex:1" id="tk-quota-wrap"><label class="f">每周期完成次数</label><input type="number" id="tk-quota" min="1" step="1" value="'+Number(t.quota||1)+'"></div></div>'+
+    '<div class="small muted" id="tk-cyc-hint" style="margin-top:4px"></div>'+
+    '<label class="f">关联目标（任务挂在拆分目标下，完成即推进它）</label><select id="tk-goal"><option value="">（不关联）</option>'+
       goals.map(g=>'<option value="'+g.id+'" '+(g.id===t.goalId?"selected":"")+'>'+esc(g.title)+'</option>').join("")+'</select>'+
     '<label class="f">推进哪个拆分目标</label><select id="tk-sub"></select>'+
-    '<label class="f">完成时推进量（计数/百分比=+N，递减=−N，是否=完成）</label><input type="number" id="tk-inc" min="1" step="1" value="'+Number(t.inc||1)+'" style="width:110px">'+
+    '<label class="f">完成方式</label><div class="tsegs" id="tk-metric">'+
+      Object.keys(METRICS).map(k=>'<button data-met="'+k+'" class="'+(metric===k?"on":"")+'">'+METRICS[k].icon+' '+METRICS[k].label+'</button>').join("")+'</div>'+
+    '<label class="f" id="tk-inc-lbl"></label><input type="number" id="tk-inc" min="1" step="1" value="'+Number(t.inc||1)+'" style="width:110px">'+
     '<label class="f">备注（可选，如执行细节/素材）</label><input type="text" id="tk-note" value="'+esc(t.note||"")+'" placeholder="例：鱼虾/蛋白粉">'+
     '<div class="row mt12">'+(isNew?'':'<button class="btn danger" id="tk-del">删除</button>')+
     '<button class="btn" data-act="close" style="flex:1">取消</button><button class="btn primary" id="tk-save" style="flex:2">保存</button></div>');
@@ -950,18 +999,33 @@ function taskForm(t){
     $("#tk-sub").innerHTML=ss.length?ss.map(s=>'<option value="'+s.id+'" '+(s.id===t.subgoalId?"selected":"")+'>'+esc(s.title)+'（'+sgDisplay(s).replace(/<[^>]+>/g,"")+'）</option>').join(""):'<option value="">（先给目标加拆分目标）</option>';
     $("#tk-sub").disabled=!ss.length;};
   fillSubs();$("#tk-goal").onchange=fillSubs;
-  let rep=t.repeat||"none";
+  const applyCyc=()=>{
+    $("#tk-due-lbl").textContent=cyc==="none"?"日期（留空=未计划）":"本周期起始日";
+    $("#tk-quota-wrap").style.display=cyc==="none"?"none":"";
+    $("#tk-cyc-hint").textContent=cyc==="none"?"":"周期内每天都会出现在任务列表，可反复标记，满额度自动完成本期并进入下一周期";
+    if(cyc!=="none"&&!$("#tk-due").value)$("#tk-due").value=dstr();};
+  const applyMetric=()=>{const m=METRICS[metric];
+    $("#tk-inc-lbl").textContent=metric==="bool"?"（是否型无需推进量）":"每次推进量"+(metric==="percent"?"（百分点）":"（计数单位）");
+    $("#tk-inc").disabled=metric==="bool";
+    $("#tk-inc").style.display=metric==="bool"?"none":"";};
+  applyCyc();applyMetric();
   $("#tk-rep").onclick=e=>{const b=e.target.closest("[data-rep]");if(!b)return;
-    $$("#tk-rep button").forEach(x=>x.classList.remove("on"));b.classList.add("on");rep=b.getAttribute("data-rep");};
+    $$("#tk-rep button").forEach(x=>x.classList.remove("on"));b.classList.add("on");cyc=b.getAttribute("data-rep");applyCyc();};
+  $("#tk-metric").onclick=e=>{const b=e.target.closest("[data-met]");if(!b)return;
+    $$("#tk-metric button").forEach(x=>x.classList.remove("on"));b.classList.add("on");metric=b.getAttribute("data-met");
+    $("#tk-inc").value=Number($("#tk-inc").value)||METRICS[metric].defInc;applyMetric();};
   $("#tk-save").onclick=()=>{const title=$("#tk-title").value.trim();if(!title){toast("标题不能为空");return;}
-    const due=$("#tk-due").value||"";
-    if(rep!=="none"&&!due){toast("重复任务需要先选日期");return;}
+    const dateVal=$("#tk-due").value||"";
+    if(cyc!=="none"&&!dateVal){toast("周期任务需要起始日期");return;}
     const id=t.id||uid();
-    const rec={id,title,due,time:t.time||"",note:$("#tk-note").value.trim(),goalId:$("#tk-goal").value||null,
-      subgoalId:$("#tk-goal").value&&$("#tk-sub").value?$("#tk-sub").value:null,inc:Math.max(1,Number($("#tk-inc").value)||1),repeat:rep};
-    if(isNew)S.tasks[id]=Object.assign(rec,{done:false,createdAt:now(),updatedAt:now(),deleted:false});
+    const rec={id,title,due:cyc==="none"?dateVal:(t.due||""),cycle:cyc,metric,
+      cycleStart:cyc!=="none"?dateVal:(t.cycleStart||""),quota:cyc!=="none"?Math.max(1,Number($("#tk-quota").value)||1):1,
+      time:t.time||"",note:$("#tk-note").value.trim(),goalId:$("#tk-goal").value||null,
+      subgoalId:$("#tk-goal").value&&$("#tk-sub").value?$("#tk-sub").value:null,
+      inc:metric==="bool"?1:Math.max(1,Number($("#tk-inc").value)||1)};
+    if(isNew)S.tasks[id]=Object.assign(rec,{done:false,marks:[],createdAt:now(),updatedAt:now(),deleted:false});
     else S.tasks[id]=Object.assign(S.tasks[id],rec,{updatedAt:now()});
-    save();closeModal();toast(isNew?"任务已添加":"已保存");};
+    rollTask(S.tasks[id]);save();closeModal();toast(isNew?"任务已添加":"已保存");};
   if(!isNew)$("#tk-del").onclick=()=>{t.deleted=true;t.updatedAt=now();save();closeModal();toast("已删除");};
 }
 function advanceSub(s,inc,dir){ /* dir=1 完成推进, -1 撤销 */
@@ -972,29 +1036,39 @@ function advanceSub(s,inc,dir){ /* dir=1 完成推进, -1 撤销 */
   else{s.current=dir>0?Math.min(t,c+inc):Math.max(0,c-inc);}
   s.updatedAt=now();
   if(sgProg(s)>=99.5&&dir>0)toast("🎉 「"+s.title+"」达成！");}
-function toggleTask(id){
-  const t=S.tasks[id];if(!t||t.deleted)return;
-  t.done=!t.done;t.doneAt=t.done?now():null;t.updatedAt=now();
-  const s=t.subgoalId&&S.subgoals[t.subgoalId]&&!S.subgoals[t.subgoalId].deleted?S.subgoals[t.subgoalId]:null;
-  if(s)advanceSub(s,Number(t.inc)||1,t.done?1:-1);
-  if(t.done&&t.repeat&&t.repeat!=="none"&&t.due){
-    const alive=t.spawnId&&S.tasks[t.spawnId]&&!S.tasks[t.spawnId].deleted;
-    if(!alive){const nid=uid();
-      S.tasks[nid]={id:nid,title:t.title,due:nextDue(t.due,t.repeat),time:"",note:t.note||"",goalId:t.goalId||null,subgoalId:t.subgoalId||null,
-        inc:Number(t.inc)||1,repeat:t.repeat,seq:(Number(t.seq)||1)+1,spawnedBy:t.id,done:false,createdAt:now(),updatedAt:now(),deleted:false};
-      t.spawnId=nid;
-    }
-  }else if(!t.done){
-    t.timeStart="";t.timeEnd="";
-    if(t.spawnId){const sp=S.tasks[t.spawnId];
-      if(sp&&!sp.deleted&&!sp.done){sp.deleted=true;sp.updatedAt=now();}
-      t.spawnId=null;}}
-  save();
-  if(t.done)timeLogForm(id);}
+function subOf(t){return t.subgoalId&&S.subgoals[t.subgoalId]&&!S.subgoals[t.subgoalId].deleted?S.subgoals[t.subgoalId]:null;}
+/* 标记一次：周期任务累计次数，满额度自动完成本期 */
+function markTask(id){const t=S.tasks[id];if(!t||t.deleted)return;
+  const s=subOf(t);
+  if(isCyc(t)){
+    if(cycMet(t))return;
+    if(s)advanceSub(s,Number(t.inc)||1,1);
+    t.marks=t.marks||[];t.marks.push({at:now()});t.updatedAt=now();
+    const met=cycMet(t);save();
+    if(met){timeLogForm(id);}else toast("已标记 "+t.marks.length+"/"+taskQuota(t));
+  }else{
+    if(t.done)return;
+    t.done=true;t.doneAt=now();t.updatedAt=now();
+    if(s)advanceSub(s,Number(t.inc)||1,1);
+    save();timeLogForm(id);}}
+/* 撤销一次标记（回退拆分目标推进） */
+function unmarkTask(id){const t=S.tasks[id];if(!t||t.deleted)return;
+  const s=subOf(t);
+  if(isCyc(t)){
+    if(!taskMarks(t).length)return;
+    if(s)advanceSub(s,Number(t.inc)||1,-1);
+    t.marks.pop();t.updatedAt=now();save();
+  }else{
+    if(!t.done)return;
+    t.done=false;t.doneAt=null;t.timeStart="";t.timeEnd="";t.updatedAt=now();
+    if(s)advanceSub(s,Number(t.inc)||1,-1);save();}}
+function toggleTask(id){const t=S.tasks[id];if(!t)return;
+  if(taskActive(t))markTask(id);else unmarkTask(id);}
 /* 完成时记录实际起止时间（可跳过） */
-function timeLogForm(tid){const t=S.tasks[tid];if(!t||!t.done)return;
+function timeLogForm(tid){const t=S.tasks[tid];if(!t)return;
+  const met=isCyc(t)?cycMet(t):t.done;if(!met)return;
   openModal('<h3>记录用时<button class="x" data-act="close">✕</button></h3>'+
-    '<div class="small muted mb8">「'+esc(t.title)+'」已完成 ✓ · 起止时间为可选，跳过也行</div>'+
+    '<div class="small muted mb8">「'+esc(t.title)+'」'+(isCyc(t)?"本期 "+taskQuota(t)+" 次已全部完成 ✓":"已完成 ✓")+' · 起止时间为可选，跳过也行</div>'+
     '<div class="row" style="gap:10px"><div style="flex:1"><label class="f">开始时间</label><input type="time" id="tl-s" value="'+esc(t.timeStart||"")+'"></div>'+
     '<div style="flex:1"><label class="f">结束时间</label><input type="time" id="tl-e" value="'+esc(t.timeEnd||"")+'"></div></div>'+
     '<div class="row mt12"><button class="btn" data-act="close" style="flex:1">跳过</button><button class="btn primary" id="tl-save" style="flex:1">保存</button></div>');
@@ -1148,7 +1222,7 @@ document.body.addEventListener("click",e=>{
     case"about":openModal('<h3>关于 VisOKR<button class="x" data-act="close">✕</button></h3><div class="small" style="line-height:1.8">'+
       '融合 <b>Vis</b> 的任务推进体验与 <b>OKR</b> 度量节奏分析的个人目标管理 PWA。<br>目标 → 拆分目标（⭐计数 / ↘递减 / %百分比 / ✓是否）→ 任务完成自动推进。<br>节奏引擎：进度 ÷ 时间进度 → 正常/偏慢/落后；复盘快照 → 趋势图。<br>数据：本机 localStorage + 可选 GitHub 私有仓库同步。<br>开源自用：github.com/KaraChenDS/okr-tracker</div>');break;
     case"help":openModal('<h3>帮助<button class="x" data-act="close">✕</button></h3><div class="small" style="line-height:1.9">'+
-      '<b>日常推进</b>：任务打勾 → 关联拆分目标自动 +N → 目标进度上涨。<br><b>重复任务</b>：设为每周/双周/每月/每年的任务，完成后自动生成下一次（锚定原计划日期顺延，月末自动钳制）；取消打勾会收回未动过的下一次。<br><b>手动补记</b>：摘要页紫色卡 ＋ 按钮直接推进。<br><b>每周仪式</b>：每个目标写一条复盘（带信心度），超 8 天没写会亮「待更新」。<br><b>看节奏</b>：摘要顶部季度卡 = 总进度环 + 时间对照 + 风险清单。<br><b>多设备</b>：我的 → 多设备同步，贴一次 fine-grained PAT。<br><b>离线</b>：添加到主屏幕，无网也能记，联网后自动补传。</div>');break;
+      '<b>日常推进</b>：任务打勾 → 关联拆分目标自动 +N → 目标进度上涨。<br><b>周期任务</b>：设为每周/双周/每月并配「每周期次数」的任务，窗口内每天都出现在列表，可反复标记（如力量训练·2/3），满额度自动完成本期、进入下一周期自动重置。<br><b>完成方式</b>：任务可设计数(+N)/百分比(+N%)/是否(✓)三种推进量，挂在拆分目标下。<br><b>手动补记</b>：摘要页紫色卡 ＋ 按钮直接推进。<br><b>每周仪式</b>：每个目标写一条复盘（带信心度），超 8 天没写会亮「待更新」。<br><b>看节奏</b>：摘要顶部季度卡 = 总进度环 + 时间对照 + 风险清单。<br><b>多设备</b>：我的 → 多设备同步，贴一次 fine-grained PAT。<br><b>离线</b>：添加到主屏幕，无网也能记，联网后自动补传。</div>');break;
   }
 });
 function saveSyncFromForm(){
@@ -1199,7 +1273,16 @@ if(isEmpty()&&UI.seeded===undefined){S=seedDemo();UI.seeded=true;saveUI();
   try{localStorage.setItem(LS_STATE,JSON.stringify(S));}catch(e){}}
 /* 迁移：为无颜色的历史目标补色（一次性，不触发推送） */
 (function(){let ch=false;Object.values(S.goals).forEach((g,i)=>{if(!g.deleted&&!g.color){g.color=OBJ_COLORS[i%OBJ_COLORS.length];g.updatedAt=now();ch=true;}});
+  /* 旧重复任务(打勾生成制) → 周期配额模型 */
+  Object.values(S.tasks).forEach(t=>{if(t.deleted||t.cycle!==undefined)return;
+    if(t.repeat&&t.repeat!=="none"){
+      t.cycle=t.repeat;t.cycleStart=t.due||dstr(new Date(t.createdAt||now()));t.quota=1;
+      t.marks=t.done?[{at:t.doneAt||t.createdAt||now()}]:[];
+      if(t.spawnedBy)t.deleted=true; /* 被生成的副本删除，父任务滚动覆盖未来 */
+      delete t.repeat;delete t.seq;delete t.spawnId;ch=true;
+    }else{t.cycle="none";ch=true;}});
   if(ch){S.meta.updatedAt=now();try{localStorage.setItem(LS_STATE,JSON.stringify(S));}catch(e){}}})();
+rollAll();
 function init(){render();bootstrapTokenFromHash();if(syncCfg().token)syncPull(true);}
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&syncCfg().token)syncPull(true);});
 window.addEventListener("online",()=>{if(syncCfg().token)syncPull(true);});
