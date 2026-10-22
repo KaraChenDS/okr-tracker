@@ -102,6 +102,18 @@ a{color:var(--accent)}
 .type-notes div{padding:2px 8px;border-radius:8px;border-left:2.5px solid transparent}
 .type-notes div.on{color:var(--ink);background:var(--chipbg);border-left-color:var(--purple)}
 .type-notes b{font-weight:700}
+.emo-ring{position:relative;display:inline-grid;place-items:center;flex:none}
+.emo-ring .emo{position:absolute;line-height:1}
+.side-sep,.side-gh,.side-gi{display:none}
+@media(min-width:1024px){
+  #tabbar{overflow-y:auto}
+  .side-sep{display:block;font-size:11px;font-weight:800;color:var(--muted);letter-spacing:1px;margin:18px 16px 6px}
+  .side-gh{display:block;font-size:11px;color:var(--muted);margin:10px 16px 4px;font-weight:700}
+  .side-gi{display:flex;align-items:center;gap:8px;padding:6px 12px;margin:1px 8px;border-radius:12px;cursor:pointer;font-size:13px;font-weight:600;min-width:0}
+  .side-gi span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .side-gi:hover{background:var(--chipbg)}
+  .side-gi.on{background:var(--chipbg);color:var(--accent)}
+}
 .ckrow{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;font-weight:700;cursor:pointer}
 .ckrow input[type=checkbox]{width:19px;height:19px;accent-color:var(--purple);flex:none}
 .sg .mp{height:4px;border-radius:99px;background:rgba(255,255,255,.3);margin-top:9px;overflow:hidden}
@@ -376,6 +388,29 @@ function sgDerived(s){ /* 推导出的"当前值"：count=推进量合计；perc
 function sgCur(s){return sgDriven(s)?sgDerived(s):Number(s.current||0);}
 const OBJ_COLORS=["#7b7bea","#e8590c","#1c7ed6","#2f9e63","#e03131","#e6a700","#0ca678","#d6336c","#5f3dc4"];
 const GROUP_ICONS=["📁","","💪","📚","💰","🎨","🌙","🔥","🏠","💼","🎮","✈️","🎸","🥗"];
+const GOAL_ICONS=["\u{1F3AF}","\u{1F4BC}","\u{1F680}","\u{1F4AA}","\u{1F4B0}","\u{1F4DA}","\u{1F3A8}","\u{1F319}","\u{1F525}","\u{1F3E0}","\u{1F9ED}","\u{2708}\u{FE0F}","\u{1F9E0}","\u{1F4BB}","\u{1F3B8}"];
+function goalEmoji(g){return g.emoji||"\u{1F3AF}";}
+/* emoji + 外侧进度环（Vis 侧栏同款） */
+function emojiRing(g,size){size=size||50;
+  const p=clamp(goalProg(g.id),0,100),w=Math.max(3,size*0.10),r=(size-w)/2,c=2*Math.PI*r,col=goalColor(g);
+  return '<span class="emo-ring" style="width:'+size+'px;height:'+size+'px">'+
+   '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" style="transform:rotate(-90deg)">'+
+   '<circle cx="'+size/2+'" cy="'+size/2+'" r="'+r+'" fill="none" style="stroke:var(--chipbg)" stroke-width="'+w+'"/>'+
+   '<circle cx="'+size/2+'" cy="'+size/2+'" r="'+r+'" fill="none" style="stroke:'+col+'" stroke-width="'+w+'" stroke-linecap="round" stroke-dasharray="'+(c*p/100).toFixed(1)+' '+c.toFixed(1)+'"/>'+
+   '</svg><span class="emo" style="font-size:'+Math.round(size*0.42)+'px">'+goalEmoji(g)+'</span></span>';}
+/* 横屏侧栏：目标直达列表（按目标组分组） */
+function sideGoalsHtml(){
+  const gs=Object.values(S.goals).filter(g=>!g.deleted&&!g.archived).sort((a,b)=>goalStatus(a)==="进行中"?-1:1);
+  if(!gs.length)return "";
+  const byG={},order=[];
+  gs.forEach(g=>{const gr=g.groupId&&S.groups[g.groupId]&&!S.groups[g.groupId].deleted?g.groupId:"_";
+    if(!byG[gr]){byG[gr]=[];order.push(gr);}byG[gr].push(g);});
+  let h='<div class="side-sep">目标</div>';
+  order.forEach(gr=>{
+    h+=gr!=="_"?'<div class="side-gh">'+(S.groups[gr].icon||"\u{1F4C1}")+' '+esc(S.groups[gr].name)+'</div>':(order.length>1?'<div class="side-gh">\u{1F3AF} 未分组</div>':"");
+    byG[gr].forEach(g=>{const on=UI.view&&UI.view.name==="goal"&&UI.view.id===g.id;
+      h+='<div class="side-gi'+(on?" on":"")+'" data-side-goal="'+g.id+'" title="'+esc(g.title)+'">'+emojiRing(g,26)+'<span>'+esc(g.title)+'</span></div>';});});
+  return h;}
 function nextDue(due,rep){const d=pdate(due);if(!d||!rep||rep==="none")return due;
   if(rep==="weekly")d.setDate(d.getDate()+7);
   else if(rep==="biweekly")d.setDate(d.getDate()+14);
@@ -754,7 +789,7 @@ function render(){
   rollAll(); /* 每次渲染先滚动过期周期窗口，保证任何页面下状态一致 */
   UI.tab=UI.tab||"sum";
   $("#tabbar").innerHTML='<div class="desk-brand"><span class="lg">◎</span>VisOKR</div>'+
-    TABS.map(t=>'<button data-tab="'+t.id+'" class="'+(t.id===UI.tab?"on":"")+'"><span class="ic">'+t.ic+'</span>'+t.label+'</button>').join("");
+    TABS.map(t=>'<button data-tab="'+t.id+'" class="'+(t.id===UI.tab?"on":"")+'"><span class="ic">'+t.ic+'</span>'+t.label+'</button>').join("")+sideGoalsHtml();
   const app=$("#app");let html="";const v=UI.view||{};
   switch(UI.tab){
     case"sum": html=v.name==="goal"?viewGoalDetail(v.id):viewSum(); break;
@@ -787,7 +822,7 @@ function viewSum(){
   quarterCard()+weekStripCard()+dashCard()+
   '<div class="goal-grid">'+Object.values(S.goals).filter(g=>!g.deleted&&!g.archived)
     .sort((a,b)=>(goalStatus(a)==="进行中"?-1:1)-(goalStatus(b)==="进行中"?-1:1))
-    .slice(0,6).map(goalCard).join("")+'</div>';
+    .slice(0,6).map(x=>goalCard(x,true)).join("")+'</div>';
 }
 function quarterCard(){
   const q=quarterOf();
@@ -838,18 +873,20 @@ function weekStripCard(){
     '</div><div class="todayline" style="left:calc('+(todayCol+0.5)+'/9*100% - 1px)"></div>'+
     '<div class="bars" style="height:'+(Math.max(1,Math.min(goals.length,4))*44)+'px;position:relative">'+bars+'</div></div>';
 }
-function goalCard(g){
-  const p=goalProg(g.id),pace=goalPace(g),open=isOpen(g.id),ss=subsOf(g.id),stale=recordStale(g);
+function goalCard(g,compact){
+  const p=goalProg(g.id),pace=goalPace(g),open=compact?false:isOpen(g.id),ss=subsOf(g.id),stale=recordStale(g);
   const lc=lastRecord(g.id);
   const ts=goalTaskStats(g.id),gc=goalColor(g);
-  return '<div class="card goal-card"><div class="gc-head" data-open-card="'+g.id+'">'+
+  return '<div class="card goal-card"><div class="gc-head row" style="align-items:flex-start;gap:12px" data-open-card="'+g.id+'">'+
+    emojiRing(g,compact?54:48)+
+    '<div style="flex:1;min-width:0">'+
     '<div class="t" style="font-size:17px;font-weight:800">'+(ts.total?'<span class="tcount">'+ts.done+'/'+ts.total+'</span>':'')+esc(g.title)+'</div>'+
     '<div class="date">📅 '+esc(g.start||"未计划")+(g.end?" - "+esc(g.end):"")+
       (g.groupId&&S.groups[g.groupId]&&!S.groups[g.groupId].deleted?'<span class="chip">'+(S.groups[g.groupId].icon||"📁")+' '+esc(S.groups[g.groupId].name)+'</span>':'')+'</div>'+
     '<div class="prow"><div class="pbar"><i style="width:'+p+'%;background:linear-gradient(90deg,'+gc+',color-mix(in srgb,'+gc+' 70%,#000 8%))"></i></div><span class="pct">'+Math.round(p)+'%</span>'+
     '<span class="chip '+pace.cls+'">'+pace.label+'</span>'+
-    '<span class="chev" data-chev="'+g.id+'">'+(open?"⌃":"⌄")+'</span></div></div>'+
-    (open?'<div class="sg-grid">'+ss.map(s=>sgCard(s,gc)).join("")+
+    (compact?'':'<span class="chev" data-chev="'+g.id+'">'+(open?"⌃":"⌄")+'</span>')+'</div></div></div>'+
+    (!compact&&open?'<div class="sg-grid">'+ss.map(s=>sgCard(s,gc)).join("")+
       '<div class="sg" style="background:var(--card2);color:var(--muted);border:1.5px dashed var(--line);justify-content:center;align-items:center;display:grid;text-align:center" data-act="new-sub" data-id="'+g.id+'">＋<br>拆分目标</div></div>'+
       '<div class="small muted mt8" style="display:flex;align-items:center;gap:8px">上次复盘 '+(lc?lc.date.slice(5).replace("-","/"):"从未")+
       (stale?'<span class="chip bad">待更新</span>':'')+
@@ -884,14 +921,14 @@ function viewGroup(gid){
   const list=goals.filter(g=>goalStatus(g)===UI.gtab);
   return titleBar(isAll?"全部目标":(S.groups[gid]?S.groups[gid].name:"目标组"),'<button class="circbtn" data-act="new-goal" data-g="'+(isAll?"":gid)+'">＋</button>',true)+
   '<div class="tabs">'+STATUS_TABS.map(k=>'<button data-gtab="'+k+'" class="'+(UI.gtab===k?"on":"")+'">'+k+' <span class="c">'+cnt(k)+'</span></button>').join("")+'</div>'+
-  (list.length?'<div class="goal-grid">'+list.map(goalCard).join("")+'</div>':'<div class="card"><div class="empty">「'+UI.gtab+'」下暂无目标</div></div>');
+  (list.length?'<div class="goal-grid">'+list.map(x=>goalCard(x)).join("")+'</div>':'<div class="card"><div class="empty">「'+UI.gtab+'」下暂无目标</div></div>');
 }
 function viewGoalDetail(gid){
   const g=S.goals[gid];if(!g||g.deleted)return viewLib();
   const p=goalProg(gid),ss=subsOf(gid),pace=goalPace(g);
   const recs=Object.values(S.records).filter(r=>!r.deleted&&r.goalId===gid).sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt-a.createdAt);
   const trend=recs.slice().reverse().map(r=>r.progressAt||0);trend.push(p);
-  return titleBar(g.title,'<button class="circbtn" data-act="edit-goal" data-id="'+gid+'">✎</button>',true)+
+  return titleBar(goalEmoji(g)+" "+g.title,'<button class="circbtn" data-act="edit-goal" data-id="'+gid+'">✎</button>',true)+
   '<div class="card"><div class="date" style="font-size:13px;color:var(--muted)">📅 '+(g.start||"未计划")+(g.end?" - "+g.end:"")+' · '+goalStatus(g)+' <span class="chip '+pace.cls+'">'+pace.label+'</span></div>'+  '<div class="prow mt8"><div class="pbar" style="height:8px"><i style="width:'+p+'%"></i></div><span class="pct" style="font-weight:800;color:var(--ink)">'+p.toFixed(1)+'%</span>'+
   '<span style="margin-left:auto">'+sparkline(trend)+'</span></div></div>'+
   '<div class="sect">拆分目标 <button class="btn small" style="margin-left:auto" data-act="new-sub" data-id="'+gid+'">＋ 添加</button></div>'+
@@ -1108,7 +1145,9 @@ function goalForm(g,preGroup){
   const subs=isNew?[{title:"",target:10}]:subsOf(g.id).map(s=>({id:s.id,title:s.title,target:s.target}));
   openModal('<h3>'+(isNew?"新建目标":"编辑目标")+'<button class="x" data-act="close">✕</button></h3>'+
     '<label class="f">目标名称</label><input type="text" id="go-title" value="'+esc(g.title||"")+'" placeholder="如 面试进展">'+
-    '<div class="row" style="gap:10px"><div style="flex:1"><label class="f">开始（可留空=未计划）</label>'+dpf("go-start",g.start||"","选择开始")+'</div>'+
+    '<div class="row" style="gap:10px"><div style="flex:1"><label class="f">图标</label><input type="text" id="go-emoji" maxlength="2" value="'+esc(g.emoji||"")+'" placeholder="\u{1F3AF}" style="width:80px">'+
+    '<div class="tsegs mt8" id="go-ic-chips">'+GOAL_ICONS.map(x=>'<button data-goic="'+x+'">'+x+'</button>').join("")+'</div>'+
+    '<label class="f">开始（可留空=未计划）</label>'+dpf("go-start",g.start||"","选择开始")+'</div>'+
     '<div style="flex:1"><label class="f">结束</label>'+dpf("go-end",g.end||"","选择结束")+'</div></div>'+
     '<label class="f">目标组</label><select id="go-group"><option value="">（不分组）</option>'+groups.map(x=>'<option value="'+x.id+'" '+(x.id===g.groupId?"selected":"")+'>'+esc(x.name)+'</option>').join("")+'</select>'+
     '<label class="f">拆分目标（先填标题和目标数，度量类型建好后在卡片上点开细调）</label><div id="go-subs"></div>'+
@@ -1124,13 +1163,14 @@ function goalForm(g,preGroup){
     d.querySelector(".del").onclick=()=>{subs.splice(i,1);renderSubs();};
     rowsBox.appendChild(d);});};
   renderSubs();bindDp("go-start",true);bindDp("go-end",true);
+  $("#go-ic-chips").onclick=e=>{const b=e.target.closest("[data-goic]");if(!b)return;$("#go-emoji").value=b.getAttribute("data-goic");};
   $("#go-addsub").onclick=()=>{subs.push({title:"",target:10});renderSubs();};
   $("#go-save").onclick=()=>{
     const title=$("#go-title").value.trim();if(!title){toast("名称不能为空");return;}
     const start=dpVal("go-start"),end=dpVal("go-end");
     if(start&&end&&start>end){toast("结束早于开始");return;}
     const id=g.id||uid();
-    const rec={id,title,start,end,groupId:$("#go-group").value||null};
+    const rec={id,title,start,end,emoji:($("#go-emoji").value.trim()||null),groupId:$("#go-group").value||null};
     if(isNew)S.goals[id]=Object.assign(rec,{color:OBJ_COLORS[Object.keys(S.goals).length%OBJ_COLORS.length],createdAt:now(),updatedAt:now(),deleted:false});
     else S.goals[id]=Object.assign(S.goals[id],rec,{updatedAt:now()});
     const keep=new Set();
@@ -1404,6 +1444,8 @@ document.body.addEventListener("click",e=>{
   if(openG){UI.tab=openG.closest(".wk")?"sum":UI.tab;pushView({name:"goal",id:openG.getAttribute("data-open-goal")});render();return;}
   const card=e.target.closest("[data-open-card]");
   if(card){pushView({name:"goal",id:card.getAttribute("data-open-card")});render();return;}
+  const sgoal=e.target.closest("[data-side-goal]");
+  if(sgoal){const sid2=sgoal.getAttribute("data-side-goal");if(UI.tab!=="sum")switchTab("sum");pushView({name:"goal",id:sid2});render();return;}
   const grp=e.target.closest("[data-group]");
   if(grp&&!e.target.closest("[data-act]")){pushView({name:"group",id:grp.getAttribute("data-group")});UI.gtab="进行中";saveUI();render();return;}
   const gtab=e.target.closest("[data-gtab]");
