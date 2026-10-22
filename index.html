@@ -166,6 +166,40 @@ a{color:var(--accent)}
 .motto .muted{font-style:normal;font-size:13px}
 .tcount{display:inline-block;background:var(--chipbg);color:var(--purple-ink);border-radius:8px;padding:1px 8px;font-size:13px;font-weight:800;margin-right:8px;font-style:normal;vertical-align:2px}
 
+/* ============ v4.1 日历与日期选择器 ============ */
+.dpf{padding:11px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--card2);font-size:15px;cursor:pointer;user-select:none}
+.dpf:active{border-color:var(--purple)}
+.dpf.empty{color:var(--muted)}
+.wdrow{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;color:var(--muted);margin-bottom:4px}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cd{position:relative;padding:7px 0 13px;text-align:center;border-radius:11px;font-size:14px;cursor:pointer;font-weight:600}
+.cd.out{opacity:.28}
+.cd.on{background:var(--accent);color:#fff}
+.cd.now{box-shadow:inset 0 0 0 1.5px var(--red)}
+.dotslot{display:block;height:7px;line-height:7px}
+.cd .dotslot i,.day .dotslot i{display:inline-block;width:5px;height:5px;border-radius:50%}
+.dotact{background:var(--purple)}
+.dotfin{background:var(--ok)}
+.dotmix{background:linear-gradient(90deg,var(--ok) 50%,var(--purple) 50%)}
+.cd.on .dotact,.cd.on .dotfin,.cd.on .dotmix{background:rgba(255,255,255,.9)}
+.day .dotslot{display:block;height:7px;text-align:center}
+.day.now .n{box-shadow:inset 0 0 0 1.6px var(--red)}
+.ymonths{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+@media(max-width:900px){.ymonths{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:640px){.ymonths{grid-template-columns:repeat(2,1fr)}}
+.ymt{font-size:12px;font-weight:700;margin-bottom:3px}
+.ygrid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.yd{position:relative;aspect-ratio:1;border-radius:3px;cursor:pointer;background:transparent}
+.yd i{position:absolute;inset:14%;border-radius:2px}
+.yd .sa{background:var(--purple)}
+.yd .sf{background:var(--ok)}
+.yd .s0{background:var(--chipbg)}
+.yd.out{opacity:.22}
+.yd.on{outline:2px solid var(--accent)}
+.task.mini{padding:9px 14px;opacity:.72;margin-bottom:8px}
+.task.mini .tt{font-size:14px;color:var(--muted)}
+.cb.ghost{border-color:var(--line);background:transparent}
+
 /* ============ 我的 ============ */
 .vip{background:linear-gradient(120deg,#17181d,#2b2d3a);border-radius:22px;color:#fff;padding:20px;margin-bottom:16px;position:relative;overflow:hidden;box-shadow:var(--shadow)}
 .vip h4{margin:0;font-size:20px;font-weight:800;display:flex;align-items:center;gap:10px}
@@ -190,6 +224,9 @@ a{color:var(--accent)}
 #overlay{position:fixed;inset:0;z-index:60;display:none;background:rgba(10,12,20,.55);backdrop-filter:blur(2px);align-items:flex-end;justify-content:center}
 @media(min-width:720px){#overlay{align-items:center}}
 #overlay.open{display:flex}
+#dpwrap{position:fixed;inset:0;z-index:70;display:none;background:rgba(10,12,20,.6);backdrop-filter:blur(2px);align-items:flex-end;justify-content:center}
+#dpwrap.open{display:flex}
+@media(min-width:720px){#dpwrap{align-items:center}}
 .modal{background:var(--card);width:100%;max-width:560px;border-radius:24px 24px 0 0;max-height:88vh;overflow:auto;padding:20px 18px calc(20px + env(safe-area-inset-bottom));box-shadow:var(--shadow2)}
 @media(min-width:720px){.modal{border-radius:22px}}
 .modal h3{margin:0 0 8px;font-size:18px;display:flex;align-items:center}
@@ -265,6 +302,7 @@ textarea{resize:vertical;min-height:70px}
 <nav id="tabbar"></nav>
 <button class="fab" id="fab" style="display:none">＋</button>
 <div id="overlay"><div class="modal" id="modal"></div></div>
+<div id="dpwrap"><div class="modal" id="dpm"></div></div>
 <div id="toast"></div>
 
 <script>
@@ -344,6 +382,50 @@ function ago(ts){const m=Math.floor((now()-ts)/60000);if(m<1)return"刚刚";if(m
 function toast(msg,ms){const t=$("#toast");const d=document.createElement("div");d.textContent=msg;t.appendChild(d);setTimeout(()=>{d.style.transition="opacity .3s";d.style.opacity="0";setTimeout(()=>d.remove(),320)},ms||2000);}
 function relDay(ds){const t=dstr(),y=dstr(new Date(now()+864e5)),p=dstr(new Date(now()-864e5));
   return ds===t?"今天":ds===y?"明天":ds===p?"昨天":ds.slice(5).replace("-","/");}
+
+/* ---------- v4.1：页签记忆 / 周一日历 / 日期选择器 ---------- */
+function switchTab(id){UI.tabViews=UI.tabViews||{};UI.tabViews[UI.tab]=UI.view;UI.tab=id;UI.view=UI.tabViews[id]||null;saveUI();render();}
+function isOpen(gid){return !!(UI.openGoals&&UI.openGoals[gid])||UI.openGoal===gid;}
+function toggleOpen(gid){UI.openGoals=UI.openGoals||{};UI.openGoals[gid]=!isOpen(gid);if(UI.openGoals[gid])delete UI.openGoal;saveUI();}
+function mondayOf(ds){const d=pdate(ds);return new Date(d.getFullYear(),d.getMonth(),d.getDate()-((d.getDay()+6)%7));}
+function dayStat(ds){let act=0,fin=0;
+  Object.values(S.tasks).forEach(t=>{if(t.deleted)return;
+    if(isCyc(t)){if(taskCovers(t,ds)){markedOn(t,ds)?fin++:act++;}}
+    else if(t.due===ds){t.done?fin++:act++;}});
+  return{act,fin};}
+function dotWrap(st){if(!st.act&&!st.fin)return'<span class="dotslot"></span>';
+  return'<span class="dotslot">'+(st.act&&st.fin?'<i class="dotmix"></i>':st.act?'<i class="dotact"></i>':'<i class="dotfin"></i>')+'</span>';}
+function shiftPick(k){const p=pdate(UI.pick||dstr());const mode=UI.calMode||"week";
+  if(k===0)UI.pick=dstr();
+  else if(mode==="week")p.setDate(p.getDate()+k*7);
+  else if(mode==="month"){const day=p.getDate();p.setDate(1);p.setMonth(p.getMonth()+k);
+    const last=new Date(p.getFullYear(),p.getMonth()+1,0).getDate();p.setDate(Math.min(day,last));}
+  else p.setFullYear(p.getFullYear()+k);
+  UI.pick=dstr(p);saveUI();render();}
+function dpf(id,value,ph){return '<div class="dpf'+(value?"":" empty")+'" id="'+id+'" data-value="'+esc(value||"")+'">'+(value||esc(ph||"选择日期"))+'</div>';}
+function dpVal(id){const el=document.getElementById(id);return (el&&el.dataset.value)||"";}
+function dpSet(id,v){const el=document.getElementById(id);el.dataset.value=v||"";el.textContent=v||"选择日期";el.classList.toggle("empty",!v);}
+function openDp(id,allowClear){
+  const cur=dpVal(id)||dstr();let val=cur;let ref=val.slice(0,7);
+  const draw=()=>{const [y,m]=ref.split("-").map(Number);const first=new Date(y,m-1,1);const mon0=mondayOf(dstr(first));
+    let cells="";
+    for(let i=0;i<42;i++){const d=new Date(mon0.getFullYear(),mon0.getMonth(),mon0.getDate()+i);const ds=dstr(d);
+      cells+='<div class="cd'+(d.getMonth()!==m-1?" out":"")+(ds===val?" on":"")+(ds===dstr()?" now":"")+'" data-dpd="'+ds+'"><span>'+d.getDate()+'</span></div>';}
+    $("#dp-body").innerHTML='<div class="row" style="justify-content:space-between;margin:2px 2px 8px">'+
+      '<button class="circbtn" data-dpn="-1">‹</button><b>'+y+'年'+m+'月</b><button class="circbtn" data-dpn="1">›</button></div>'+
+      '<div class="wdrow">'+["一","二","三","四","五","六","日"].map(w=>"<span>周"+w+"</span>").join("")+'</div><div class="calgrid">'+cells+'</div>';
+    $("#dp-body").querySelectorAll("[data-dpd]").forEach(b=>b.onclick=()=>{val=b.getAttribute("data-dpd");dpSet(id,val);closeDp();});
+    $("#dp-body").querySelectorAll("[data-dpn]").forEach(b=>b.onclick=()=>{const [yy,mm]=ref.split("-").map(Number);
+      const nd=new Date(yy,mm-1+Number(b.getAttribute("data-dpn")),1);ref=nd.getFullYear()+"-"+String(nd.getMonth()+1).padStart(2,"0");draw();});};
+  $("#dpm").innerHTML='<h3>选择日期<button class="x" id="dp-x">✕</button></h3><div id="dp-body"></div>'+
+    '<div class="row mt12"><button class="btn" id="dp-today">今天</button>'+(allowClear?'<button class="btn" id="dp-clear">清除</button>':'')+'</div>';
+  $("#dpwrap").classList.add("open");
+  draw();
+  $("#dp-x").onclick=closeDp;
+  $("#dp-today").onclick=()=>{dpSet(id,dstr());closeDp();};
+  if(allowClear)$("#dp-clear").onclick=()=>{dpSet(id,"");closeDp();};}
+function closeDp(){$("#dpwrap").classList.remove("open");$("#dpm").innerHTML="";}
+function bindDp(id,allowClear){const el=document.getElementById(id);if(el)el.onclick=()=>openDp(id,allowClear);}
 
 /* ---------- 存储 ---------- */
 const LS_STATE="okr_state_v2", LS_UI="okr_ui_v2", SY_KEY="okr_sync_v1";
@@ -626,7 +708,7 @@ function render(){
   switch(UI.tab){
     case"sum": html=v.name==="goal"?viewGoalDetail(v.id):viewSum(); break;
     case"lib": html=v.name==="group"?viewGroup(v.id):v.name==="goal"?viewGoalDetail(v.id):viewLib(); break;
-    case"task":html=v.name==="today"?viewToday():viewTasks(); break;
+    case"task":html=UI.taskMode==="list"?viewTasks():viewCal(); break;
     case"me":  html=v.name==="sync"?viewSyncPage():v.name==="records"?viewRecords():v.name==="general"?viewGeneral():viewMe(); break;
   }
   app.innerHTML=html;
@@ -706,7 +788,7 @@ function weekStripCard(){
     '<div class="bars" style="height:'+(Math.max(1,Math.min(goals.length,4))*44)+'px;position:relative">'+bars+'</div></div>';
 }
 function goalCard(g){
-  const p=goalProg(g.id),pace=goalPace(g),open=UI.openGoal===g.id,ss=subsOf(g.id),stale=recordStale(g);
+  const p=goalProg(g.id),pace=goalPace(g),open=isOpen(g.id),ss=subsOf(g.id),stale=recordStale(g);
   const lc=lastRecord(g.id);
   const ts=goalTaskStats(g.id),gc=goalColor(g);
   return '<div class="card goal-card"><div class="gc-head" data-open-card="'+g.id+'">'+
@@ -793,30 +875,59 @@ function viewTasks(){
     list.forEach(x=>{const at=taskDoneAt(x);const k=at?dstr(new Date(at)):"完成";(groups[k]=groups[k]||[]).push(x);});
   }else groups[""]=list;
   const order=tab==="未完成"?["已逾期","今日","明天","之后"]:Object.keys(groups).sort().reverse();
-  return titleBar("全部任务",'<button class="circbtn" data-nav="today">📅</button>')+
+  return titleBar("全部任务",'<button class="circbtn" data-nav="taskmode">📅</button>')+
   '<div class="seg">'+["未完成","未计划","已结束"].map(k=>'<button data-ttab="'+k+'" class="'+(tab===k?"on":"")+'">'+k+'</button>').join("")+'</div>'+
   (order.filter(k=>groups[k]&&groups[k].length).map(k=>
-    '<div class="tgroup '+(k==="已逾期"?"overdue":"")+'">'+(tab==="未完成"?k+" "+groups[k].length:(tab==="已结束"?(k===t0?"今日":relDay(k))+" "+groups[k].length:"未计划 "+groups[k].length))+'</div>'+
-    groups[k].map(x=>taskRow(x,t0)).join("")).join("")||'<div class="card"><div class="empty">「'+tab+'」暂无任务<br><button class="btn small mt8" data-nav="add-task">＋ 去添加</button></div></div>');
+    '<div class="tgroup '+(k==="已逾期"?"overdue":"")+'">'+(tab==="未完成"?k+" "+groups[k].length:(tab==="已结束"?(k===t0?"今日":relDay(k))+" "+groups[k].length:"未计划 "+groups[k].length))+(tab==="未完成"&&(k==="明天"||k==="之后")?' <span class="small muted" style="font-weight:400">（非今日，仅预览）</span>':'')+'</div>'+
+    groups[k].map(x=>taskRow(x,t0,(tab==="未完成"&&(k==="明天"||k==="之后"))?"compact":"")).join("")).join("")||'<div class="card"><div class="empty">「'+tab+'」暂无任务<br><button class="btn small mt8" data-nav="add-task">＋ 去添加</button></div></div>');
 }
-function viewToday(){
+function viewCal(){
   rollAll();
-  const t=new Date();const days=[];
-  const mon=new Date(t.getFullYear(),t.getMonth(),t.getDate()-((t.getDay()+6)%7));
-  for(let i=0;i<7;i++)days.push(new Date(mon.getFullYear(),mon.getMonth(),mon.getDate()+i));
-  UI.pick=UI.pick||dstr();
-  const all=Object.values(S.tasks).filter(x=>!x.deleted);
-  const list=all.filter(x=>taskActive(x)&&taskCovers(x,UI.pick)).sort((a,b)=>String(a.time||"99").localeCompare(String(b.time||"99"))||a.title.localeCompare(b.title));
-  const doneList=all.filter(x=>!taskActive(x)&&taskCovers(x,UI.pick));
-  return titleBar("今日任务",'<button class="circbtn" data-nav="all-task">☰</button>',false)+
-  '<div class="daystrip">'+days.map(d=>{const ds=dstr(d);const has=all.some(x=>taskCovers(x,ds));
-    return '<div class="day '+(ds===UI.pick?"on":"")+'" data-pick="'+ds+'"><div class="w">'+WD[d.getDay()]+'</div><div class="n">'+d.getDate()+'</div>'+(has&&ds!==UI.pick?'<div class="has"></div>':'')+'</div>';}).join("")+'</div>'+
-  '<div class="tgroup">未完成 '+list.length+(doneList.length?' · 已完成 '+doneList.length:'')+'</div>'+
-  (list.length?list.map(x=>taskRow(x,UI.pick)).join(""):'')+
-  (doneList.length?'<div class="tgroup">已完成 '+doneList.length+'</div>'+doneList.map(x=>taskRow(x,UI.pick)).join(""):'')+
-  (!list.length&&!doneList.length?'<div class="card"><div class="empty">'+(UI.pick===dstr()?"今天没有待办，休息也是进度 🌿":"这天没有任务")+'<br><button class="btn small mt8" data-nav="add-task">＋ 添加任务</button></div></div>':'');
+  const mode=UI.calMode||"week";
+  const pick=UI.pick||dstr();
+  const seg='<div class="tsegs" id="cal-mode" style="margin:-4px 2px 12px">'+
+    [["week","周"],["month","月"],["year","年"]].map(k=>'<button data-calm="'+k[0]+'" class="'+(mode===k[0]?"on":"")+'">'+k[1]+'视图</button>').join("")+'</div>';
+  let cal="";
+  if(mode==="week"){
+    const mon=mondayOf(pick);const days=[];
+    for(let i=0;i<7;i++)days.push(new Date(mon.getFullYear(),mon.getMonth(),mon.getDate()+i));
+    cal='<div class="row" style="justify-content:space-between;margin:0 2px 8px">'+
+      '<button class="circbtn" data-calnav="-1">‹</button><span class="small muted">'+dstr(days[0]).slice(5).replace("-","/")+" ~ "+dstr(days[6]).slice(5).replace("-","/")+'</span><button class="circbtn" data-calnav="1">›</button></div>'+
+      '<div class="daystrip">'+days.map(d=>{const ds=dstr(d);const st=dayStat(ds);
+        return '<div class="day '+(ds===pick?"on":"")+(ds===dstr()?" now":"")+'" data-pick="'+ds+'"><div class="w">'+WD[d.getDay()]+'</div><div class="n">'+d.getDate()+'</div>'+dotWrap(st)+'</div>';}).join("")+'</div>';
+  }else if(mode==="month"){
+    const ref=pdate(pick);const y=ref.getFullYear(),m=ref.getMonth();
+    const mon0=mondayOf(y+"-"+String(m+1).padStart(2,"0")+"-01");
+    let cells="";
+    for(let i=0;i<42;i++){const d=new Date(mon0.getFullYear(),mon0.getMonth(),mon0.getDate()+i);const ds=dstr(d);
+      const st=dayStat(ds);
+      cells+='<div class="cd'+(d.getMonth()!==m?" out":"")+(ds===pick?" on":"")+(ds===dstr()?" now":"")+'" data-pick="'+ds+'"><span>'+d.getDate()+'</span>'+dotWrap(st)+'</div>';}
+    cal='<div class="row" style="justify-content:space-between;margin:0 2px 8px">'+
+      '<button class="circbtn" data-calnav="-1">‹</button><b>'+(y+"年"+(m+1)+"月")+'</b><button class="circbtn" data-calnav="1">›</button></div>'+
+      '<div class="wdrow">'+["一","二","三","四","五","六","日"].map(w=>"<span>周"+w+"</span>").join("")+'</div><div class="calgrid">'+cells+'</div>';
+  }else{
+    const y=pdate(pick).getFullYear();let months="";
+    for(let m=0;m<12;m++){const mon0=mondayOf(y+"-"+String(m+1).padStart(2,"0")+"-01");
+      let cells="";
+      for(let i=0;i<42;i++){const d=new Date(mon0.getFullYear(),mon0.getMonth(),mon0.getDate()+i);const ds=dstr(d);
+        const st=dayStat(ds);
+        cells+='<div class="yd'+(d.getMonth()!==m?" out":"")+(ds===pick?" on":"")+'" data-pick="'+ds+'" title="'+ds+(st.act||st.fin?" · 待办"+st.act+" 完成"+st.fin:"")+'"><i class="'+(st.act?"sa":st.fin?"sf":"s0")+'"></i></div>';}
+      months+='<div class="ym"><div class="ymt">'+(m+1)+'月</div><div class="ygrid">'+cells+'</div></div>';}
+    cal='<div class="row" style="justify-content:space-between;margin:0 2px 8px">'+
+      '<button class="circbtn" data-calnav="-1">‹</button><b>'+y+'年</b><button class="circbtn" data-calnav="1">›</button></div><div class="ymonths">'+months+'</div>';
+  }
+  const all=Object.values(S.tasks).filter(t=>!t.deleted);
+  const future=pick>dstr();
+  let list=all.filter(t=>taskCovers(t,pick));
+  if(pick===dstr())list=list.concat(all.filter(t=>!isCyc(t)&&!t.done&&t.due&&t.due<pick));
+  const actN=list.filter(t=>taskActive(t)).length;
+  const body=list.length?list.map(t=>taskRow(t,pick,future?"nomark":"")).join("")
+    :'<div class="card"><div class="empty">'+(future?"这天还在未来，届时再来打卡 🌱":"这天没有任务")+'<br><button class="btn small mt8" data-nav="add-task">＋ 添加任务</button></div></div>';
+  return titleBar("任务日历",'<button class="circbtn" data-nav="taskmode">☰</button>')+seg+
+    '<div class="card">'+cal+'<button class="btn small" data-calnav="0" style="margin-top:6px">回到今天</button></div>'+
+    '<div class="tgroup">'+relDay(pick)+' · 未完成 '+actN+(future?' <span class="chip warn">未来日不可打卡</span>':'')+'</div>'+body;
 }
-function taskRow(t,dayCtx){
+function taskRow(t,dayCtx,mode){
   const g=t.goalId&&S.goals[t.goalId]&&!S.goals[t.goalId].deleted?S.goals[t.goalId]:null;
   const s=subOf(t);
   const imp=g&&s?goalImpactPct(g.id,s.id,t.inc||1):0;
@@ -826,6 +937,15 @@ function taskRow(t,dayCtx){
   const dayDone=cyc&&markedOn(t,ds);
   const mk=taskMarks(t).length,q=taskQuota(t);
   const mt=METRICS[taskMetric(t)]||METRICS.count;
+  const compact=mode==="compact",nomark=mode==="nomark";
+  /* 简化版：非今日任务只读展示，不提供打卡 */
+  if(compact){
+    return '<div class="task mini" data-task-open="'+t.id+'">'+
+      '<span class="cb ghost"></span>'+
+      '<div class="bd"><div class="tt">'+esc(t.title)+(cyc?'<span class="rep">🔁 '+REPEATS[t.cycle]+'</span>':'')+'</div>'+
+      '<div class="meta">'+(t.due?WD[pdate(t.due).getDay()]+","+relDay(t.due):(cyc?"窗口 "+t.cycleStart.slice(5).replace("-","/")+" 起":"未计划"))+(g?" · "+esc(g.title):"")+'</div></div>'+
+    '</div>';
+  }
   const meta=[];const overdue=!cyc&&t.due&&t.due<dstr()&&!done;
   if(cyc){meta.push(REPEATS[t.cycle]+"任务·每日一次");meta.push("窗口 "+t.cycleStart.slice(5).replace("-","/")+" ~ "+cycEnd(t.cycleStart,t.cycle).slice(5).replace("-","/")+"（含前）");if(met)meta.push("本期已满 ✓");else if(dayDone)meta.push("今日已打卡 ✓");}
   else if(t.due){meta.push(WD[pdate(t.due).getDay()]);meta.push(relDay(t.due));}
@@ -834,8 +954,11 @@ function taskRow(t,dayCtx){
   const repTag=cyc?'<span class="rep">🔁 '+REPEATS[t.cycle]+(q>1?' · '+mk+'/'+q:'')+'</span>':'';
   const cbFill=done||dayDone;
   const cbInner=cbFill?"✓":(cyc&&mk>0?'<span style="font-size:11px;font-weight:800;color:'+(c||"inherit")+'">'+mk+'</span>':'');
+  const cbHtml=nomark
+    ?'<span class="cb" style="opacity:.4;'+(cbFill?"background:"+(c||"var(--purple)")+";color:#fff":(c?"border-color:"+c:""))+'">'+(cbFill?"✓":"")+'</span>'
+    :'<button class="cb" data-toggle="'+t.id+'"'+(c?' style="border-color:'+c+';'+(cbFill?"background:"+(met?c:"transparent")+";color:"+(met?"#fff":c):"")+'"':(cbFill?' style="background:var(--purple);color:#fff"':''))+'>'+cbInner+'</button>';
   return '<div class="task '+(done?"done":"")+(dayDone&&!met?" todaydone":"")+'" data-task-open="'+t.id+'"'+(c&&!done?' style="background:color-mix(in srgb,'+c+' 9%,var(--card))"':'')+'>'+
-    '<button class="cb" data-toggle="'+t.id+'"'+(c?' style="border-color:'+c+';'+(cbFill?"background:"+(met?c:"transparent")+";color:"+(met?"#fff":c):"")+'"':(cbFill?' style="background:var(--purple);color:#fff"':''))+'>'+cbInner+'</button>'+
+    cbHtml+
     '<div class="bd"><div class="tt"'+(c&&!done?' style="color:'+c+'"':'')+'>'+esc(t.title)+repTag+'</div>'+
     (meta.length?'<div class="meta '+(overdue?"overdue":"")+'">'+meta.join(" · ")+(overdue?" · 逾期":"")+'</div>':'<div class="meta">未计划</div>')+
     (t.note?'<div class="meta">备注：'+esc(t.note)+'</div>':'')+
@@ -907,6 +1030,7 @@ function viewSyncPage(){
 function openModal(html){$("#overlay").classList.add("open");$("#modal").innerHTML=html;$("#modal").querySelector("input,textarea")?.focus();}
 function closeModal(){$("#overlay").classList.remove("open");$("#modal").innerHTML="";}
 $("#overlay").addEventListener("click",e=>{if(e.target.id==="overlay")closeModal();});
+$("#dpwrap").addEventListener("click",e=>{if(e.target.id==="dpwrap")closeDp();});
 
 function groupForm(gr){
   gr=gr||{};
@@ -933,8 +1057,8 @@ function goalForm(g,preGroup){
   const subs=isNew?[{title:"",target:10}]:subsOf(g.id).map(s=>({id:s.id,title:s.title,target:s.target}));
   openModal('<h3>'+(isNew?"新建目标":"编辑目标")+'<button class="x" data-act="close">✕</button></h3>'+
     '<label class="f">目标名称</label><input type="text" id="go-title" value="'+esc(g.title||"")+'" placeholder="如 面试进展">'+
-    '<div class="row" style="gap:10px"><div style="flex:1"><label class="f">开始（可留空=未计划）</label><input type="date" id="go-start" value="'+esc(g.start||"")+'"></div>'+
-    '<div style="flex:1"><label class="f">结束</label><input type="date" id="go-end" value="'+esc(g.end||"")+'"></div></div>'+
+    '<div class="row" style="gap:10px"><div style="flex:1"><label class="f">开始（可留空=未计划）</label>'+dpf("go-start",g.start||"","选择开始")+'</div>'+
+    '<div style="flex:1"><label class="f">结束</label>'+dpf("go-end",g.end||"","选择结束")+'</div></div>'+
     '<label class="f">目标组</label><select id="go-group"><option value="">（不分组）</option>'+groups.map(x=>'<option value="'+x.id+'" '+(x.id===g.groupId?"selected":"")+'>'+esc(x.name)+'</option>').join("")+'</select>'+
     '<label class="f">拆分目标（先填标题和目标数，度量类型建好后在卡片上点开细调）</label><div id="go-subs"></div>'+
     '<button class="btn small mt8" id="go-addsub">＋ 加一个拆分目标</button>'+
@@ -948,11 +1072,11 @@ function goalForm(g,preGroup){
     ti.oninput=()=>subs[i].title=ti.value;vi.oninput=()=>subs[i].target=Number(vi.value)||10;
     d.querySelector(".del").onclick=()=>{subs.splice(i,1);renderSubs();};
     rowsBox.appendChild(d);});};
-  renderSubs();
+  renderSubs();bindDp("go-start",true);bindDp("go-end",true);
   $("#go-addsub").onclick=()=>{subs.push({title:"",target:10});renderSubs();};
   $("#go-save").onclick=()=>{
     const title=$("#go-title").value.trim();if(!title){toast("名称不能为空");return;}
-    const start=$("#go-start").value,end=$("#go-end").value;
+    const start=dpVal("go-start"),end=dpVal("go-end");
     if(start&&end&&start>end){toast("结束早于开始");return;}
     const id=g.id||uid();
     const rec={id,title,start,end,groupId:$("#go-group").value||null};
@@ -1019,7 +1143,7 @@ function taskForm(t){
     '<label class="f">任务标题</label><input type="text" id="tk-title" value="'+esc(t.title||"")+'" placeholder="如 力量训练 / AI agent落地流程">'+
     '<label class="f">周期</label><div class="tsegs" id="tk-rep">'+
       Object.keys(REPEATS).map(k=>'<button data-rep="'+k+'" class="'+(cyc===k?"on":"")+'">'+REPEATS[k]+'</button>').join("")+'</div>'+
-    '<div class="row" style="gap:10px;margin-top:4px"><div style="flex:1"><label class="f" id="tk-due-lbl"></label><input type="date" id="tk-due" value="'+esc((cyc==="none"?(t.due||UI.pickToday||""):t.cycleStart)||"")+'"></div>'+
+    '<div class="row" style="gap:10px;margin-top:4px"><div style="flex:1"><label class="f" id="tk-due-lbl"></label>'+dpf("tk-due",(cyc==="none"?(t.due||UI.pickToday||""):t.cycleStart)||"","留空=未计划")+'</div>'+
     '<div style="flex:1" id="tk-quota-wrap"><label class="f">每周期完成次数</label><input type="number" id="tk-quota" min="1" step="1" value="'+Number(t.quota||1)+'"></div></div>'+
     '<div class="small muted" id="tk-cyc-hint" style="margin-top:4px"></div>'+
     '<label class="f">关联目标（任务挂在拆分目标下，完成即推进它）</label><select id="tk-goal"><option value="">（不关联）</option>'+
@@ -1039,19 +1163,19 @@ function taskForm(t){
     $("#tk-due-lbl").textContent=cyc==="none"?"日期（留空=未计划）":"本周期起始日";
     $("#tk-quota-wrap").style.display=cyc==="none"?"none":"";
     $("#tk-cyc-hint").textContent=cyc==="none"?"":"周期内每天都会出现在任务列表，可反复标记，满额度自动完成本期并进入下一周期";
-    if(cyc!=="none"&&!$("#tk-due").value)$("#tk-due").value=dstr();};
+    if(cyc!=="none"&&!dpVal("tk-due"))dpSet("tk-due",dstr());};
   const applyMetric=()=>{const m=METRICS[metric];
     $("#tk-inc-lbl").textContent=metric==="bool"?"（是否型无需推进量）":"每次推进量"+(metric==="percent"?"（百分点）":"（计数单位）");
     $("#tk-inc").disabled=metric==="bool";
     $("#tk-inc").style.display=metric==="bool"?"none":"";};
-  applyCyc();applyMetric();
+  applyCyc();applyMetric();bindDp("tk-due",true);
   $("#tk-rep").onclick=e=>{const b=e.target.closest("[data-rep]");if(!b)return;
     $$("#tk-rep button").forEach(x=>x.classList.remove("on"));b.classList.add("on");cyc=b.getAttribute("data-rep");applyCyc();};
   $("#tk-metric").onclick=e=>{const b=e.target.closest("[data-met]");if(!b)return;
     $$("#tk-metric button").forEach(x=>x.classList.remove("on"));b.classList.add("on");metric=b.getAttribute("data-met");
     $("#tk-inc").value=Number($("#tk-inc").value)||METRICS[metric].defInc;applyMetric();};
   $("#tk-save").onclick=()=>{const title=$("#tk-title").value.trim();if(!title){toast("标题不能为空");return;}
-    const dateVal=$("#tk-due").value||"";
+    const dateVal=dpVal("tk-due");
     if(cyc!=="none"&&!dateVal){toast("周期任务需要起始日期");return;}
     const id=t.id||uid();
     const rec={id,title,due:cyc==="none"?dateVal:(t.due||""),cycle:cyc,metric,
@@ -1200,17 +1324,20 @@ document.addEventListener("pointercancel",()=>{if(dragState){dragState.el.classL
    ============================================================= */
 document.body.addEventListener("click",e=>{
   const tab=e.target.closest("[data-tab]");
-  if(tab){UI.tab=tab.getAttribute("data-tab");UI.view=null;saveUI();render();return;}
+  if(tab){switchTab(tab.getAttribute("data-tab"));return;}
   const nav=e.target.closest("[data-nav]");
   if(nav){const n=nav.getAttribute("data-nav");
     if(n==="back")UI.view=null;
-    else if(n==="today")UI.view={name:"today"};
-    else if(n==="all-task")UI.view=null;
+    else if(n==="taskmode"){UI.taskMode=(UI.taskMode||"cal")==="cal"?"list":"cal";saveUI();render();return;}
     else if(n==="add-task"){taskForm();return;}
     else UI.view={name:n};
     saveUI();render();return;}
+  const calm=e.target.closest("[data-calm]");
+  if(calm){UI.calMode=calm.getAttribute("data-calm");saveUI();render();return;}
+  const cn=e.target.closest("[data-calnav]");
+  if(cn){shiftPick(Number(cn.getAttribute("data-calnav")));return;}
   const chev=e.target.closest("[data-chev]");
-  if(chev){const id=chev.getAttribute("data-chev");UI.openGoal=UI.openGoal===id?null:id;render();return;}
+  if(chev){toggleOpen(chev.getAttribute("data-chev"));render();return;}
   if(dragSuppressed)return;
   const openG=e.target.closest("[data-open-goal]");
   if(openG){UI.tab=openG.closest(".wk")?"sum":UI.tab;UI.view={name:"goal",id:openG.getAttribute("data-open-goal")};saveUI();render();return;}
@@ -1225,7 +1352,7 @@ document.body.addEventListener("click",e=>{
   const pick=e.target.closest("[data-pick]");
   if(pick){UI.pick=pick.getAttribute("data-pick");render();return;}
   const tog=e.target.closest("[data-toggle]");
-  if(tog){e.stopPropagation();const dctx=(UI.view&&UI.view.name==="today")?(UI.pick||dstr()):dstr();
+  if(tog){e.stopPropagation();const dctx=UI.taskMode==="cal"?(UI.pick||dstr()):dstr();
     toggleTask(tog.getAttribute("data-toggle"),dctx);return;}
   const bump=e.target.closest("[data-bump]");
   if(bump){e.stopPropagation();bumpSub(bump.getAttribute("data-bump"));return;}
@@ -1260,7 +1387,7 @@ document.body.addEventListener("click",e=>{
         const sid=uid();S.subgoals[sid]={id:sid,goalId:gid,title,type:ntype,current:0,
           start:Number($("#ns-start").value)||0,target:ntype==="percent"?100:(ntype==="bool"?1:(Number($("#ns-tgt").value)||10)),
           createdAt:now(),updatedAt:now(),deleted:false};
-        UI.openGoal=gid;save();closeModal();toast("已添加");};break;}
+        toggleOpen(gid);save();closeModal();toast("已添加");};break;}
     case"new-record":recordForm(id);break;
     case"motto":mottoForm();break;
     case"archive-goal":{const g=S.goals[id];g.archived=!g.archived;g.updatedAt=now();save();
@@ -1323,7 +1450,7 @@ function importJSON(){const inp=document.createElement("input");inp.type="file";
   inp.click();}
 
 /* ---------- FAB & 主题 & 启动 ---------- */
-$("#fab").onclick=()=>{UI.pickToday=(UI.view&&UI.view.name==="today")?UI.pick:dstr();taskForm();};
+$("#fab").onclick=()=>{UI.pickToday=UI.taskMode==="cal"?(UI.pick||dstr()):dstr();taskForm();};
 function applyTheme(){document.documentElement.setAttribute("data-theme",UI.dark?"dark":"light");}
 (function(){if(UI.dark===undefined)UI.dark=matchMedia("(prefers-color-scheme: dark)").matches;applyTheme();})();
 if(isEmpty()&&UI.seeded===undefined){S=seedDemo();UI.seeded=true;saveUI();

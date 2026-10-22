@@ -1,5 +1,5 @@
 /* VisOKR · 极简离线缓存：App Shell 优先；跨域 API（GitHub 同步）绝不缓存 */
-const CACHE = "visokr-v12";
+const CACHE = "visokr-v13";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest",
                 "./icons/icon-32.png", "./icons/icon-180.png",
                 "./icons/icon-192.png", "./icons/icon-512.png",
