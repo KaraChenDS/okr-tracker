@@ -201,6 +201,38 @@ textarea{resize:vertical;min-height:70px}
 .sgedit input[type=text]{flex:1}
 .sgedit input[type=number]{width:76px}
 .sgedit .del{color:var(--red);font-size:18px;padding:0 4px}
+/* ============ 三端适配 ============ */
+.goal-grid{display:grid;grid-template-columns:1fr;gap:14px}
+.goal-grid .card{margin-bottom:0}
+.desk-brand{display:none}
+/* 平板（iPad 竖屏/横屏 <1024）：加宽 + 目标双列，底部胶囊导航不变 */
+@media(min-width:641px) and (max-width:1023px){
+  #app{max-width:800px}
+  .goal-grid{grid-template-columns:1fr 1fr}
+  .sg-grid{grid-template-columns:1fr 1fr 1fr}
+  .dash2{grid-template-columns:1.15fr .85fr}
+}
+/* PC（≥1024）：左侧边栏导航 + 宽内容区 + 双列 */
+@media(min-width:1024px){
+  #tabbar{top:0;bottom:auto;left:0;transform:none;width:216px;height:100vh;flex-direction:column;
+    gap:4px;border-radius:0;padding:26px 14px 20px;align-items:stretch;width:216px;box-shadow:1px 0 0 var(--line)}
+  .desk-brand{display:flex;align-items:center;gap:10px;font-size:19px;font-weight:800;padding:6px 14px 22px;letter-spacing:-.3px}
+  .desk-brand .lg{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--purple),var(--purple-ink));display:grid;place-items:center;font-size:15px}
+  #tabbar button{flex:none;flex-direction:row;gap:12px;padding:12px 16px;border-radius:14px;font-size:15px;font-weight:600}
+  #tabbar button .ic{font-size:18px}
+  #tabbar button.on{background:var(--chipbg)}
+  #app{margin-left:216px;max-width:980px;padding:26px 34px 60px}
+  .page-title{margin-top:4px}
+  .fab{right:36px;bottom:36px}
+  #syncchip{left:20px;right:auto;top:auto;bottom:18px;width:176px;justify-content:flex-start}
+  .goal-grid{grid-template-columns:1fr 1fr}
+  .sg-grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+  .dash2{grid-template-columns:1.15fr .85fr;gap:22px}
+  .grouplist{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .grouplist .grow{margin-bottom:0}
+  .modal{border-radius:22px}
+  #overlay{align-items:center}
+}
 .empty{padding:30px 12px;text-align:center;color:var(--muted);font-size:13.5px}
 .empty .big{font-size:36px;margin-bottom:8px}
 #toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:90;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
@@ -493,7 +525,8 @@ function dashCard(){
 const TABS=[{id:"sum",ic:"📈",label:"摘要"},{id:"lib",ic:"🎯",label:"目标库"},{id:"task",ic:"📋",label:"任务"},{id:"me",ic:"👤",label:"我的"}];
 function render(){
   UI.tab=UI.tab||"sum";
-  $("#tabbar").innerHTML=TABS.map(t=>'<button data-tab="'+t.id+'" class="'+(t.id===UI.tab?"on":"")+'"><span class="ic">'+t.ic+'</span>'+t.label+'</button>').join("");
+  $("#tabbar").innerHTML='<div class="desk-brand"><span class="lg">◎</span>VisOKR</div>'+
+    TABS.map(t=>'<button data-tab="'+t.id+'" class="'+(t.id===UI.tab?"on":"")+'"><span class="ic">'+t.ic+'</span>'+t.label+'</button>').join("");
   const app=$("#app");let html="";const v=UI.view||{};
   switch(UI.tab){
     case"sum": html=v.name==="goal"?viewGoalDetail(v.id):viewSum(); break;
@@ -523,9 +556,9 @@ function viewSum(){
     '<div class="stat"><div class="n"><span class="em" style="color:var(--red)">🗂</span>'+todayTasks+'</div><div class="l">今日任务</div></div>'+
   '</div>'+
   quarterCard()+weekStripCard()+dashCard()+
-  Object.values(S.goals).filter(g=>!g.deleted&&!g.archived)
+  '<div class="goal-grid">'+Object.values(S.goals).filter(g=>!g.deleted&&!g.archived)
     .sort((a,b)=>(goalStatus(a)==="进行中"?-1:1)-(goalStatus(b)==="进行中"?-1:1))
-    .slice(0,6).map(goalCard).join("");
+    .slice(0,6).map(goalCard).join("")+'</div>';
 }
 function quarterCard(){
   const q=quarterOf();
@@ -620,7 +653,7 @@ function viewGroup(gid){
   const list=goals.filter(g=>goalStatus(g)===UI.gtab);
   return titleBar(isAll?"全部目标":(S.groups[gid]?S.groups[gid].name:"目标组"),'<button class="circbtn" data-act="new-goal" data-g="'+(isAll?"":gid)+'">＋</button>',true)+
   '<div class="tabs">'+STATUS_TABS.map(k=>'<button data-gtab="'+k+'" class="'+(UI.gtab===k?"on":"")+'">'+k+' <span class="c">'+cnt(k)+'</span></button>').join("")+'</div>'+
-  (list.length?list.map(goalCard).join(""):'<div class="card"><div class="empty">「'+UI.gtab+'」下暂无目标</div></div>');
+  (list.length?'<div class="goal-grid">'+list.map(goalCard).join("")+'</div>':'<div class="card"><div class="empty">「'+UI.gtab+'」下暂无目标</div></div>');
 }
 function viewGoalDetail(gid){
   const g=S.goals[gid];if(!g||g.deleted)return viewLib();
