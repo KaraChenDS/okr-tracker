@@ -144,6 +144,18 @@ a{color:var(--accent)}
 .day.on .n{background:var(--accent);color:#fff}
 .day .has{width:4px;height:4px;border-radius:50%;background:var(--purple);display:inline-block;margin:2px auto 0}
 
+/* ============ 趋势/热力看板 ============ */
+.dash2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:560px){.dash2{grid-template-columns:1fr}}
+.dash2 h4{margin:0 0 8px;font-size:13px;font-weight:800;display:flex;align-items:center;gap:6px}
+.dash2 h4 .sub{margin-left:auto;font-weight:400;font-size:11px;color:var(--muted)}
+.trend-wrap{position:relative}
+.trend-wrap svg{width:100%;height:auto;display:block}
+.trend-x{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-top:2px}
+.heatgrid{display:grid;grid-template-columns:repeat(13,1fr);gap:5px;max-width:320px}
+.heatcell{width:12px;height:12px;border-radius:4px;background:var(--chipbg)}
+.streak{display:inline-flex;align-items:center;gap:4px;background:var(--warnbg);color:var(--warn);border-radius:99px;padding:2px 9px;font-size:11.5px;font-weight:800}
+
 /* ============ 我的 ============ */
 .vip{background:linear-gradient(120deg,#17181d,#2b2d3a);border-radius:22px;color:#fff;padding:20px;margin-bottom:16px;position:relative;overflow:hidden;box-shadow:var(--shadow)}
 .vip h4{margin:0;font-size:20px;font-weight:800;display:flex;align-items:center;gap:10px}
@@ -156,8 +168,6 @@ a{color:var(--accent)}
 .setrow .ic{font-size:19px;width:26px;text-align:center}
 .setrow .arr{margin-left:auto;color:#c3c7d1;font-size:15px}
 .setrow.danger{color:var(--red)}
-.heatgrid{display:grid;grid-template-columns:repeat(13,1fr);gap:5px;max-width:320px}
-.heatcell{width:12px;height:12px;border-radius:4px;background:var(--chipbg)}
 
 /* ============ 复盘/时间线 ============ */
 .tl-item{display:flex;gap:12px;padding:12px 2px;border-bottom:1px solid var(--line)}
@@ -205,6 +215,7 @@ textarea{resize:vertical;min-height:70px}
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
   <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:#8a8af0"/><stop offset="1" style="stop-color:#6366f1"/></linearGradient>
+  <linearGradient id="gTrend" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--purple);stop-opacity:.28"/><stop offset="1" style="stop-color:var(--purple);stop-opacity:0"/></linearGradient>
 </defs></svg>
 
 <div id="syncchip" title="同步状态"><span class="dot" style="background:#b9bec9"></span><span class="txt">未配置同步</span></div>
@@ -436,6 +447,45 @@ function heatGrid(){
     const bg=lvl===0?"var(--chipbg)":"color-mix(in srgb, var(--purple) "+(18+lvl*26)+"%, var(--card))";
     cells+='<div class="heatcell" title="'+dstr(d)+(n?" · "+n+" 条复盘":"")+'" style="background:'+bg+'"></div>';}
   return '<div class="heatgrid">'+cells+'</div>';}
+/* 趋势重建：按复盘时间线还原整体进度（每条复盘存了当时快照 progressAt） */
+function trendPoints(){
+  const gs=Object.values(S.goals).filter(g=>!g.deleted&&!g.archived);
+  if(!gs.length)return [];
+  const rs=Object.values(S.records).filter(r=>!r.deleted&&gs.some(g=>g.id===r.goalId))
+    .sort((a,b)=>a.date.localeCompare(b.date)||a.createdAt-b.createdAt);
+  if(!rs.length)return [];
+  const latest={};const pts=[];
+  rs.forEach(r=>{latest[r.goalId]=Number(r.progressAt)||0;
+    const sum=gs.reduce((a,g)=>a+(latest[g.id]!=null?latest[g.id]:0),0);
+    pts.push({date:r.date,val:sum/gs.length});});
+  const last=pts[pts.length-1];
+  const cur=gs.reduce((a,g)=>a+goalProg(g.id),0)/gs.length;
+  if(last.date<dstr())pts.push({date:dstr(),val:cur});else pts[pts.length-1]={date:dstr(),val:cur};
+  return pts;}
+function trendChart(pts){
+  if(pts.length<2)return '<div class="empty small">复盘 2 条后出现趋势曲线</div>';
+  const W=320,H=140,P=10;
+  const xs=pts.map((p,i)=>P+i*(W-2*P)/(pts.length-1));
+  const ys=pts.map(p=>H-P-(clamp(p.val,0,100)/100)*(H-2*P));
+  const line=xs.map((x,i)=>x.toFixed(1)+","+ys[i].toFixed(1)).join(" ");
+  const area=line+" "+xs[xs.length-1].toFixed(1)+","+(H-P)+" "+P+","+(H-P);
+  let grid="";[25,50,75].forEach(g=>{const y=(H-P-g/100*(H-2*P)).toFixed(1);
+    grid+='<line x1="'+P+'" x2="'+(W-P)+'" y1="'+y+'" y2="'+y+'" style="stroke:var(--line)" stroke-dasharray="3 4"/>';});
+  return '<div class="trend-wrap"><svg viewBox="0 0 '+W+' '+H+'">'+grid+
+    '<polygon points="'+area+'" fill="url(#gTrend)"/>'+
+    '<polyline points="'+line+'" fill="none" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" style="stroke:var(--purple)"/>'+
+    pts.map((p,i)=>'<circle cx="'+xs[i].toFixed(1)+'" cy="'+ys[i].toFixed(1)+'" r="2.6" style="fill:var(--card);stroke:var(--purple)" stroke-width="1.6"/>').join("")+
+    '<circle cx="'+xs[xs.length-1].toFixed(1)+'" cy="'+ys[ys.length-1].toFixed(1)+'" r="4" style="fill:var(--purple)"/></svg>'+
+    '<div class="trend-x"><span>'+pts[0].date.slice(5).replace("-","/")+'</span><span>'+pts[pts.length-1].date.slice(5).replace("-","/")+' · 现在 '+Math.round(pts[pts.length-1].val)+'%</span></div></div>';}
+/* 摘要页数据看板：趋势 + 热力 + streak */
+function dashCard(){
+  const pts=trendPoints();const streak=recordStreak();
+  const recCnt=Object.values(S.records).filter(r=>!r.deleted).length;
+  return '<div class="card"><div class="dash2">'+
+    '<div><h4>📈 进度趋势<span class="sub">按复盘快照重建</span></h4>'+trendChart(pts)+'</div>'+
+    '<div><h4>🗓 复盘热力<span class="sub">近 91 天'+(streak>0?' · <span class="streak">🔥'+streak+' 天</span>':'')+'</span></h4>'+heatGrid()+
+    '<div class="small muted mt8">共 '+recCnt+' 条复盘 · 每目标每周 ≥1 次效果最好</div></div>'+
+  '</div></div>';}
 
 /* =============================================================
    渲染
@@ -472,7 +522,7 @@ function viewSum(){
     '<div class="stat"><div class="n"><span class="em">⏱</span>'+ongoing.length+'</div><div class="l">进行中目标</div></div>'+
     '<div class="stat"><div class="n"><span class="em" style="color:var(--red)">🗂</span>'+todayTasks+'</div><div class="l">今日任务</div></div>'+
   '</div>'+
-  quarterCard()+weekStripCard()+
+  quarterCard()+weekStripCard()+dashCard()+
   Object.values(S.goals).filter(g=>!g.deleted&&!g.archived)
     .sort((a,b)=>(goalStatus(a)==="进行中"?-1:1)-(goalStatus(b)==="进行中"?-1:1))
     .slice(0,6).map(goalCard).join("");
