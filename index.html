@@ -70,7 +70,10 @@ a{color:var(--accent)}
 .wk .todayline{position:absolute;top:34px;bottom:6px;width:2px;background:var(--red);z-index:2;border-radius:2px}
 .wk .bars{position:relative;margin-top:8px;display:flex;flex-direction:column;gap:10px;min-height:34px}
 .gbar{height:34px;border-radius:10px;background:linear-gradient(90deg,var(--purple),var(--purple2));color:#fff;
-  display:flex;align-items:center;padding:0 10px;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;cursor:pointer;box-shadow:var(--shadow)}
+  display:flex;align-items:center;padding:0 10px;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;cursor:grab;box-shadow:var(--shadow);
+  touch-action:none;user-select:none;position:relative}
+.gbar.dragging{cursor:grabbing;opacity:.9;box-shadow:var(--shadow2);z-index:5}
+.gbar .hint{margin-left:auto;font-size:10px;opacity:.75;padding-left:8px}
 /* 季度节奏卡 */
 .qcard{display:flex;gap:16px;align-items:center}
 .ring{position:relative;display:grid;place-items:center;flex:none}
@@ -280,10 +283,11 @@ function goalImpactPct(gid,sid,inc){
   else d=(Number(s.current||0)+inc<=Math.max(1,Number(s.target||10)))?(inc/Math.max(1,Number(s.target||10)))*100:0;
   const ww=Number(s.weight)>0?Number(s.weight):1;
   return clamp(d*ww/W,0,100);}
-function goalStatus(g){if(!g.start||!g.end)return"未计划";const t=dstr();
+function goalStatus(g){if(g.archived)return"已归档";if(!g.start||!g.end)return"未计划";const t=dstr();
   if(g.start>t)return"未开始";if(g.end<t)return"已结束";return"进行中";}
 function goalPace(g){ /* v1 节奏徽章：进度 vs 时间 */
   const p=goalProg(g.id);
+  if(g.archived)return{label:"已归档",cls:""};
   if(p>=99.5)return{label:"已完成",cls:"done"};
   const st=goalStatus(g);
   if(st==="未计划")return{label:"未计划",cls:""};
@@ -299,8 +303,17 @@ function lastRecord(gid){const rs=Object.values(S.records).filter(r=>!r.deleted&
 function recordStale(g){const lc=lastRecord(g.id);
   if(goalStatus(g)!=="进行中")return false;
   return !lc || dayDiff(pdate(lc.date),new Date())>8;}
-const STATUS_TABS=["进行中","未计划","未开始","已结束"];
+const STATUS_TABS=["进行中","未计划","未开始","已结束","已归档"];
 function goalsIn(gid){return Object.values(S.goals).filter(g=>!g.deleted&&(gid==null||g.groupId===gid)).sort((a,b)=>b.createdAt-a.createdAt);}
+function shiftGoal(id,days){const g=S.goals[id];if(!g||g.deleted||!g.start||!g.end)return false;
+  const s=pdate(g.start),e=pdate(g.end);
+  g.start=dstr(new Date(s.getFullYear(),s.getMonth(),s.getDate()+days));
+  g.end=dstr(new Date(e.getFullYear(),e.getMonth(),e.getDate()+days));
+  g.updatedAt=now();save();
+  toast("「"+g.title+"」→ "+g.start.slice(5).replace("-","/")+" – "+g.end.slice(5).replace("-","/"));return true;}
+function recordStreak(){const ds=new Set(Object.values(S.records).filter(r=>!r.deleted).map(r=>r.date));
+  if(!ds.size)return 0;let d=new Date();if(!ds.has(dstr(d)))d=new Date(d.getTime()-864e5);
+  let n=0;while(ds.has(dstr(d))){n++;d=new Date(d.getTime()-864e5);}return n;}
 function openTasks(){return Object.values(S.tasks).filter(t=>!t.deleted&&!t.done);}
 function isDone(t){return !!t.done;}
 function quarterOf(d){d=d||new Date();const q=Math.floor(d.getMonth()/3)+1;const y=d.getFullYear();
@@ -460,13 +473,13 @@ function viewSum(){
     '<div class="stat"><div class="n"><span class="em" style="color:var(--red)">🗂</span>'+todayTasks+'</div><div class="l">今日任务</div></div>'+
   '</div>'+
   quarterCard()+weekStripCard()+
-  Object.values(S.goals).filter(g=>!g.deleted)
+  Object.values(S.goals).filter(g=>!g.deleted&&!g.archived)
     .sort((a,b)=>(goalStatus(a)==="进行中"?-1:1)-(goalStatus(b)==="进行中"?-1:1))
     .slice(0,6).map(goalCard).join("");
 }
 function quarterCard(){
   const q=quarterOf();
-  const gs=Object.values(S.goals).filter(g=>!g.deleted&&g.start&&g.end&&g.start<=q.end&&g.end>=q.start);
+  const gs=Object.values(S.goals).filter(g=>!g.deleted&&!g.archived&&g.start&&g.end&&g.start<=q.end&&g.end>=q.start);
   if(!gs.length)return "";
   const overall=gs.reduce((a,g)=>a+goalProg(g.id),0)/gs.length;
   const tp=timeProgOf(q.start,q.end);
@@ -498,7 +511,7 @@ function weekStripCard(){
   const t=new Date();const days=[];
   for(let i=-4;i<=4;i++)days.push(new Date(t.getFullYear(),t.getMonth(),t.getDate()+i));
   const win={s:dstr(days[0]),e:dstr(days[8])};
-  const goals=Object.values(S.goals).filter(g=>!g.deleted&&g.start&&g.end&&g.start<=win.e&&g.end>=win.s);
+  const goals=Object.values(S.goals).filter(g=>!g.deleted&&!g.archived&&g.start&&g.end&&g.start<=win.e&&g.end>=win.s);
   const todayCol=4;
   let bars="";
   goals.slice(0,4).forEach((g,i)=>{
@@ -507,7 +520,7 @@ function weekStripCard(){
     if(e<s)return;
     const left=s/9*100,w=(e-s+1)/9*100;
     bars+='<div style="position:absolute;left:'+left+'%;width:'+w+'%;top:'+(i*44)+'px">'+
-      '<div class="gbar" data-open-goal="'+g.id+'" style="width:100%">'+esc(g.title)+'</div></div>';});
+      '<div class="gbar" data-drag-goal="'+g.id+'" data-open-goal="'+g.id+'" style="width:100%">'+esc(g.title)+'<span class="hint">⇄</span></div></div>';});
   return '<div class="card wk"><div class="mo">'+(t.getMonth()+1)+'月</div><div class="days">'+
     days.map(d=>{const ds=dstr(d);return '<div class="d '+(ds===dstr()?"today":"")+'">'+(ds===dstr()?"今天":d.getDate())+'</div>';}).join("")+
     '</div><div class="todayline" style="left:calc('+(todayCol+0.5)+'/9*100% - 1px)"></div>'+
@@ -522,7 +535,7 @@ function goalCard(g){
       (g.groupId&&S.groups[g.groupId]&&!S.groups[g.groupId].deleted?'<span class="chip">📁 '+esc(S.groups[g.groupId].name)+'</span>':'')+'</div>'+
     '<div class="prow"><div class="pbar"><i style="width:'+p+'%"></i></div><span class="pct">'+Math.round(p)+'%</span>'+
     '<span class="chip '+pace.cls+'">'+pace.label+'</span>'+
-    '<span class="chev">'+(open?"⌃":"⌄")+'</span></div></div>'+
+    '<span class="chev" data-chev="'+g.id+'">'+(open?"⌃":"⌄")+'</span></div></div>'+
     (open?'<div class="sg-grid">'+ss.map(sgCard).join("")+
       '<div class="sg" style="background:var(--card2);color:var(--muted);border:1.5px dashed var(--line);justify-content:center;align-items:center;display:grid;text-align:center" data-act="new-sub" data-id="'+g.id+'">＋<br>拆分目标</div></div>'+
       '<div class="small muted mt8" style="display:flex;align-items:center;gap:8px">上次复盘 '+(lc?lc.date.slice(5).replace("-","/"):"从未")+
@@ -565,15 +578,17 @@ function viewGoalDetail(gid){
   const recs=Object.values(S.records).filter(r=>!r.deleted&&r.goalId===gid).sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt-a.createdAt);
   const trend=recs.slice().reverse().map(r=>r.progressAt||0);trend.push(p);
   return titleBar(g.title,'<button class="circbtn" data-act="edit-goal" data-id="'+gid+'">✎</button>',true)+
-  '<div class="card"><div class="date" style="font-size:13px;color:var(--muted)">📅 '+(g.start||"未计划")+(g.end?" - "+g.end:"")+' · '+goalStatus(g)+' <span class="chip '+pace.cls+'">'+pace.label+'</span></div>'+
-  '<div class="prow mt8"><div class="pbar" style="height:8px"><i style="width:'+p+'%"></i></div><span class="pct" style="font-weight:800;color:var(--ink)">'+p.toFixed(1)+'%</span>'+
+  '<div class="card"><div class="date" style="font-size:13px;color:var(--muted)">📅 '+(g.start||"未计划")+(g.end?" - "+g.end:"")+' · '+goalStatus(g)+' <span class="chip '+pace.cls+'">'+pace.label+'</span></div>'+  '<div class="prow mt8"><div class="pbar" style="height:8px"><i style="width:'+p+'%"></i></div><span class="pct" style="font-weight:800;color:var(--ink)">'+p.toFixed(1)+'%</span>'+
   '<span style="margin-left:auto">'+sparkline(trend)+'</span></div></div>'+
   '<div class="sect">拆分目标 <button class="btn small" style="margin-left:auto" data-act="new-sub" data-id="'+gid+'">＋ 添加</button></div>'+
   (ss.length?'<div class="sg-grid">'+ss.map(sgCard).join("")+'</div>':'<div class="card"><div class="empty small">还没有拆分目标</div></div>')+
   '<div class="sect">复盘记录 <button class="btn small primary" style="margin-left:auto" data-act="new-record" data-id="'+gid+'">✍️ 写复盘</button></div>'+
   (recs.length?recs.slice(0,8).map(r=>{const cf=CONF2[r.confidence]||CONF2.mid;
     return '<div class="tl-item"><div class="tl-date">'+r.date.slice(5).replace("-","/")+'<br><span style="color:var(--purple-ink)">'+Math.round(r.progressAt||0)+'%</span><br>'+cf.label+'</div>'+
-    '<div class="tl-body">'+esc(r.text)+'</div></div>';}).join(""):'<div class="card"><div class="empty small">还没有复盘，每周写一条效果最好</div></div>');
+    '<div class="tl-body">'+esc(r.text)+'</div></div>';}).join(""):'<div class="card"><div class="empty small">还没有复盘，每周写一条效果最好</div></div>')+
+  '<div class="row mt12" style="gap:10px;padding:4px 2px 8px">'+
+    '<button class="btn small" style="flex:1" data-act="archive-goal" data-id="'+gid+'">'+(g.archived?"↩ 取消归档":"📦 归档目标")+'</button>'+
+    '<button class="btn small danger" style="flex:1" data-act="del-goal" data-id="'+gid+'">🗑 删除目标</button></div>';
 }
 
 /* ---------- 任务 ---------- */
@@ -645,8 +660,9 @@ function viewMe(){
 }
 function viewRecords(){
   const rs=Object.values(S.records).filter(r=>!r.deleted).sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt-a.createdAt);
+  const streak=recordStreak();
   return titleBar("复盘记录","",true)+
-  '<div class="card"><div class="small bold mb8">近 91 天复盘热力</div>'+heatGrid()+'</div>'+
+  '<div class="card"><div class="small bold mb8">近 91 天复盘热力'+(streak>0?'<span class="chip done" style="margin-left:8px">🔥 连续 '+streak+' 天</span>':'')+'</div>'+heatGrid()+'</div>'+
   (rs.length?'<div class="card">'+rs.map(r=>{const g=S.goals[r.goalId];const cf=CONF2[r.confidence]||CONF2.mid;
     return '<div class="tl-item"><div class="tl-date">'+r.date.slice(5).replace("-","/")+'<br><span style="color:var(--purple-ink)">'+Math.round(r.progressAt||0)+'%</span><br>'+cf.label+'</div>'+
     '<div class="tl-body"><b class="small">'+esc(g&&!g.deleted?g.title:"（目标已删除）")+'</b><br>'+esc(r.text)+
@@ -843,6 +859,38 @@ function confirmModal(msg,onYes){
     '<div class="row mt12"><button class="btn" data-act="close" style="flex:1">取消</button><button class="btn primary" id="cm-yes" style="flex:1">确认</button></div>');
   $("#cm-yes").onclick=()=>{onYes();closeModal();};
 }
+function deleteGoal(id){const g=S.goals[id];if(!g||g.deleted)return;
+  g.deleted=true;g.updatedAt=now();
+  subsOf(id).forEach(s=>{s.deleted=true;s.updatedAt=now();});
+  Object.values(S.tasks).forEach(t=>{if(!t.deleted&&t.goalId===id){t.goalId=null;t.subgoalId=null;t.updatedAt=now();}});
+  Object.values(S.records).forEach(r=>{if(!r.deleted&&r.goalId===id){r.deleted=true;r.updatedAt=now();}});
+  save();UI.tab="lib";UI.view=null;render();toast("已删除");}
+
+/* ---------- 周时间轴拖拽改期（按住紫条左右拖，按天吸附；轻点=进详情） ---------- */
+let dragState=null,dragSuppressed=false;
+document.addEventListener("pointerdown",e=>{
+  const bar=e.target.closest("[data-drag-goal]");if(!bar)return;
+  const strip=bar.closest(".wk");if(!strip)return;
+  const daysEl=strip.querySelector(".days");if(!daysEl)return;
+  dragState={id:bar.getAttribute("data-drag-goal"),x0:e.clientX,colW:daysEl.getBoundingClientRect().width/9,el:bar,delta:0,moved:false};
+});
+document.addEventListener("pointermove",e=>{
+  if(!dragState)return;
+  const dx=e.clientX-dragState.x0;
+  if(!dragState.moved&&Math.abs(dx)>6){dragState.moved=true;dragState.el.classList.add("dragging");}
+  if(!dragState.moved)return;
+  const d=Math.round(dx/dragState.colW);
+  if(d!==dragState.delta){dragState.delta=d;dragState.el.style.transform="translateX("+(d*dragState.colW)+"px)";}
+});
+document.addEventListener("pointerup",()=>{
+  if(!dragState)return;
+  const st=dragState;dragState=null;
+  st.el.classList.remove("dragging");
+  if(st.moved){dragSuppressed=true;setTimeout(()=>dragSuppressed=false,400);}
+  if(st.moved&&st.delta)shiftGoal(st.id,st.delta);
+  else if(st.moved)render();
+});
+document.addEventListener("pointercancel",()=>{if(dragState){dragState.el.classList.remove("dragging");dragState=null;render();}});
 
 /* =============================================================
    事件
@@ -858,10 +906,13 @@ document.body.addEventListener("click",e=>{
     else if(n==="add-task"){taskForm();return;}
     else UI.view={name:n};
     saveUI();render();return;}
+  const chev=e.target.closest("[data-chev]");
+  if(chev){const id=chev.getAttribute("data-chev");UI.openGoal=UI.openGoal===id?null:id;render();return;}
+  if(dragSuppressed)return;
   const openG=e.target.closest("[data-open-goal]");
   if(openG){UI.tab=openG.closest(".wk")?"sum":UI.tab;UI.view={name:"goal",id:openG.getAttribute("data-open-goal")};saveUI();render();return;}
   const card=e.target.closest("[data-open-card]");
-  if(card){const id=card.getAttribute("data-open-card");UI.openGoal=UI.openGoal===id?null:id;render();return;}
+  if(card){UI.view={name:"goal",id:card.getAttribute("data-open-card")};saveUI();render();return;}
   const grp=e.target.closest("[data-group]");
   if(grp){UI.view={name:"group",id:grp.getAttribute("data-group")};UI.gtab="进行中";saveUI();render();return;}
   const gtab=e.target.closest("[data-gtab]");
@@ -906,6 +957,9 @@ document.body.addEventListener("click",e=>{
           weight:1,createdAt:now(),updatedAt:now(),deleted:false};
         UI.openGoal=gid;save();closeModal();toast("已添加");};break;}
     case"new-record":recordForm(id);break;
+    case"archive-goal":{const g=S.goals[id];g.archived=!g.archived;g.updatedAt=now();save();
+      toast(g.archived?"已归档，可在目标库「已归档」找回":"已恢复为进行中");break;}
+    case"del-goal":confirmModal("删除目标「"+esc(S.goals[id].title)+"」及其拆分目标与复盘？任务将解除关联。",()=>deleteGoal(id));break;
     case"del-record":{const r=S.records[id];r.deleted=true;r.updatedAt=now();save();toast("已删除");break;}
     case"theme":UI.dark=!UI.dark;applyTheme();saveUI();render();break;
     case"save-sync":saveSyncFromForm();break;
