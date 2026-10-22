@@ -97,6 +97,7 @@ a{color:var(--accent)}
 .sg .cnt{font-size:14px;font-weight:700;flex:1;text-align:center;margin-right:6px}
 .sg .plus{width:30px;height:30px;border-radius:50%;border:2px solid rgba(255,255,255,.85);display:grid;place-items:center;font-size:18px;font-weight:600;color:#fff;flex:none}
 .sg .plus:active{background:rgba(255,255,255,.25)}
+.sg .sgauto{font-size:10.5px;background:rgba(255,255,255,.22);border-radius:99px;padding:3px 9px;font-weight:700;white-space:nowrap;flex:none}
 .sg .mp{height:4px;border-radius:99px;background:rgba(255,255,255,.3);margin-top:9px;overflow:hidden}
 .sg .mp>i{display:block;height:100%;border-radius:99px;background:#fff;transition:width .35s}
 .sg .mini{position:absolute;top:8px;right:10px;font-size:11px;opacity:.85}
@@ -305,6 +306,29 @@ function taskActive(t){return isCyc(t)?!cycMet(t):!t.done;}
 function taskDoneAt(t){if(isCyc(t)){const ms=taskMarks(t);return cycMet(t)&&ms.length?ms[ms.length-1].at:0;}return t.doneAt||0;}
 function taskCovers(t,ds){if(isCyc(t))return !!t.cycleStart&&ds>=t.cycleStart&&ds<cycEnd(t.cycleStart,t.cycle);return t.due===ds;}
 function taskMetric(t){return t.metric||"count";}
+/* ---------- 任务驱动型拆分目标：当前值由关联任务自动计算 ---------- */
+function linkedTasks(sgid){return Object.values(S.tasks).filter(t=>!t.deleted&&t.subgoalId===sgid);}
+function sgDriven(s){const ty=sgType(s);return (ty==="count"||ty==="percent"||ty==="bool")&&linkedTasks(s.id).length>0;}
+function winCount(t){ /* 从窗口起点至今已开启的周期数（含当前） */
+  const st=t.origStart||t.cycleStart;if(!st)return 1;
+  const today=dstr();let n=1,cs=st;
+  while(cycEnd(cs,t.cycle)<=today&&n<700){cs=cycEnd(cs,t.cycle);n++;}
+  return n;}
+function taskExpected(t){const inc=Number(t.inc)||1;
+  if(isCyc(t))return taskQuota(t)*winCount(t)*inc;
+  return (t.due&&t.due<=dstr())?inc:0;}
+function taskAchieved(t){const inc=Number(t.inc)||1;
+  if(isCyc(t))return (Number(t.doneTotal)||taskMarks(t).length)*inc;
+  return t.done?inc:0;}
+function sgDerived(s){ /* 推导出的"当前值"：count=推进量合计；percent/bool=推荐量达成率% */
+  const ts=linkedTasks(s.id);
+  const ach=ts.reduce((a,t)=>a+taskAchieved(t),0);
+  if(sgType(s)==="count")return ach;
+  const exp=ts.reduce((a,t)=>a+taskExpected(t),0);
+  const pct=exp>0?clamp(ach/exp*100,0,100):0;
+  if(sgType(s)==="bool")return pct>=99.5?1:0;
+  return pct;}
+function sgCur(s){return sgDriven(s)?sgDerived(s):Number(s.current||0);}
 const OBJ_COLORS=["#7b7bea","#e8590c","#1c7ed6","#2f9e63","#e03131","#e6a700","#0ca678","#d6336c","#5f3dc4"];
 const GROUP_ICONS=["📁","","💪","📚","💰","🎨","🌙","🔥","🏠","💼","🎮","✈️","🎸","🥗"];
 function nextDue(due,rep){const d=pdate(due);if(!d||!rep||rep==="none")return due;
@@ -340,16 +364,16 @@ function save(opts){S.meta.updatedAt=now();
 const subsOf=g=>Object.values(S.subgoals).filter(x=>!x.deleted&&x.goalId===g).sort((a,b)=>a.createdAt-b.createdAt);
 function sgType(s){return s.type||"count";}
 function sgProg(s){
-  const c=Number(s.current||0), t=Math.max(1,Number(s.target||10)), st=Number(s.start||0);
+  const c=sgDriven(s)?sgDerived(s):Number(s.current||0), t=Math.max(1,Number(s.target||10)), st=Number(s.start||0);
   const ty=sgType(s);
   if(ty==="percent") return clamp(c,0,100);
   if(ty==="bool")    return c>=1?100:0;
   if(ty==="decrease")return (st-t)>0?clamp((st-c)/(st-t)*100,0,100):(c<=t?100:0);
-  return clamp(c/t*100,0,100);
+  return clamp(c/t*100,0,100); /* count：driven 时 c=推进量合计 */
 }
 function sgDisplay(s){
-  const c=Number(s.current||0), t=Math.max(1,Number(s.target||10)), ty=sgType(s);
-  if(ty==="percent") return fmtNum(c)+" / 100%";
+  const c=sgCur(s), t=Math.max(1,Number(s.target||10)), ty=sgType(s);
+  if(ty==="percent") return fmtNum(Math.round(c))+" / 100%";
   if(ty==="bool")    return c>=1?"已完成":"未完成";
   if(ty==="decrease")return fmtNum(c)+" ↘ "+fmtNum(t);
   return fmtNum(c)+"→"+fmtNum(t);
@@ -359,7 +383,12 @@ function goalProg(gid){const ss=subsOf(gid);if(!ss.length)return 0;
   return ss.reduce((a,s)=>a+sgProg(s),0)/ss.length;}
 function goalImpactPct(gid,sid,inc){
   const ss=subsOf(gid);const s=ss.find(x=>x.id===sid);if(!s)return 0;
-  const before=sgProg(s),ty=sgType(s),c=Number(s.current||0);let after=c;
+  const ty=sgType(s);
+  if(sgDriven(s)){ /* 任务驱动：一次标记对达成率的边际贡献 */
+    if(ty==="count"){const tgt=Math.max(1,Number(s.target||10));return clamp(Math.min(inc,tgt-sgCur(s))/tgt*100/ss.length,0,100);}
+    const exp=linkedTasks(sid).reduce((a,t)=>a+taskExpected(t),0);
+    return exp>0?clamp(inc/exp*100/ss.length,0,100):0;}
+  const before=sgProg(s),c=Number(s.current||0);let after=c;
   if(ty==="bool")after=1;
   else if(ty==="percent")after=Math.min(100,c+inc);
   else if(ty==="decrease")after=Math.max(Number(s.target||10),c-inc);
@@ -696,12 +725,12 @@ function goalCard(g){
   '</div>';
 }
 function sgCard(s,c){
-  const ty=sgType(s),meta=SG_TYPES[ty];c=c||goalColor(S.goals[s.goalId]);
+  const ty=sgType(s),meta=SG_TYPES[ty],driven=sgDriven(s),cur=sgCur(s);c=c||goalColor(S.goals[s.goalId]);
   return '<div class="sg" data-edit-sub="'+s.id+'" style="background:linear-gradient(160deg,color-mix(in srgb,'+c+' 72%,#fff 12%),'+c+')"><span class="sgp">'+meta.icon+' '+meta.label+'</span><div class="mini">✎</div>'+
     '<div class="t">'+esc(s.title)+'</div>'+
-    '<div class="b"><span>'+(ty==="count"?"⭐":ty==="decrease"?"↘":ty==="bool"?(Number(s.current)>=1?"✅":"⬜"):"")+'</span>'+
+    '<div class="b"><span>'+(ty==="count"?"⭐":ty==="decrease"?"↘":ty==="bool"?(cur>=1?"✅":"⬜"):"")+'</span>'+
     '<span class="cnt">'+sgDisplay(s)+'</span>'+
-    '<button class="plus" data-bump="'+s.id+'">'+(ty==="bool"&&Number(s.current)>=1?"↺":"＋")+'</button></div>'+
+    (driven?'<span class="sgauto">🔗 任务自动</span>':'<button class="plus" data-bump="'+s.id+'">'+(ty==="bool"&&cur>=1?"↺":"＋")+'</button>')+'</div>'+
     '<div class="mp"><i style="width:'+sgProg(s)+'%"></i></div></div>';
 }
 
@@ -945,16 +974,17 @@ function goalForm(g,preGroup){
 }
 function subForm(sid){
   const s=S.subgoals[sid];if(!s)return;
-  const ty=s.type||"count";
+  const ty=s.type||"count",driven=sgDriven(s),nTasks=linkedTasks(sid).length;
   openModal('<h3>编辑拆分目标<button class="x" data-act="close">✕</button></h3>'+
     '<label class="f">标题</label><input type="text" id="sb-title" value="'+esc(s.title)+'">'+
     '<label class="f">度量类型</label><div class="tsegs" id="sb-types">'+
       Object.keys(SG_TYPES).map(k=>'<button data-sgt="'+k+'" class="'+(k===ty?"on":"")+'">'+SG_TYPES[k].icon+' '+SG_TYPES[k].label+'</button>').join("")+'</div>'+
     '<div class="row" style="gap:10px;flex-wrap:wrap;margin-top:4px">'+
       '<div id="sb-start-wrap" style="flex:1;min-width:120px"><label class="f">起始值</label><input type="number" step="any" id="sb-start" value="'+Number(s.start||0)+'"></div>'+
-      '<div style="flex:1;min-width:120px"><label class="f">当前值</label><input type="number" step="any" id="sb-cur" value="'+Number(s.current||0)+'"></div>'+
+      '<div id="sb-cur-wrap" style="flex:1;min-width:120px"><label class="f">当前值</label><input type="number" step="any" id="sb-cur" value="'+Number(s.current||0)+'"></div>'+
       '<div id="sb-tgt-wrap" style="flex:1;min-width:120px"><label class="f">目标值</label><input type="number" step="any" id="sb-tgt" value="'+Number(s.target||10)+'"></div>'+
     '</div>'+
+    (driven?'<div class="small" id="sb-driven" style="margin-top:8px;color:var(--purple-ink)">🔗 当前值 = <b>'+sgDisplay(s)+'</b>，由 '+nTasks+' 个关联任务的打卡数据自动计算，无需手填</div>':'')+
     '<div class="small muted" id="sb-hint" style="margin-top:8px"></div>'+
     '<div class="row mt12"><button class="btn danger" id="sb-del">删除</button><button class="btn" data-act="close" style="flex:1">取消</button><button class="btn primary" id="sb-save" style="flex:2">保存</button></div>');
   let type=ty;
@@ -965,7 +995,8 @@ function subForm(sid){
   const applyType=()=>{
     $("#sb-start-wrap").style.display=type==="decrease"?"":"none";
     $("#sb-tgt-wrap").style.display=type==="bool"?"none":"";
-    $("#sb-hint").textContent=HINTS[type];
+    $("#sb-cur-wrap").style.display=driven?"none":"";
+    $("#sb-hint").textContent=driven&&type!=="decrease"?"当前值由任务推导，这里只改类型与目标":HINTS[type];
     if(type==="percent"){$("#sb-tgt").value=100;$("#sb-cur").max=100;}
     if(type==="bool"){$("#sb-cur").min=0;$("#sb-cur").max=1;$("#sb-cur").step=1;}
     else{$("#sb-cur").min="";$("#sb-cur").max="";$("#sb-cur").step="any";}};
@@ -1028,8 +1059,8 @@ function taskForm(t){
       time:t.time||"",note:$("#tk-note").value.trim(),goalId:$("#tk-goal").value||null,
       subgoalId:$("#tk-goal").value&&$("#tk-sub").value?$("#tk-sub").value:null,
       inc:metric==="bool"?1:Math.max(1,Number($("#tk-inc").value)||1)};
-    if(isNew)S.tasks[id]=Object.assign(rec,{done:false,marks:[],createdAt:now(),updatedAt:now(),deleted:false});
-    else S.tasks[id]=Object.assign(S.tasks[id],rec,{updatedAt:now()});
+    if(isNew)S.tasks[id]=Object.assign(rec,{done:false,marks:[],doneTotal:0,origStart:cyc!=="none"?dateVal:"",createdAt:now(),updatedAt:now(),deleted:false});
+    else{if(cyc!=="none"&&!S.tasks[id].origStart)rec.origStart=dateVal;S.tasks[id]=Object.assign(S.tasks[id],rec,{updatedAt:now()});}
     rollTask(S.tasks[id]);save();closeModal();toast(isNew?"任务已添加":"已保存");};
   if(!isNew)$("#tk-del").onclick=()=>{t.deleted=true;t.updatedAt=now();save();closeModal();toast("已删除");};
 }
@@ -1052,16 +1083,19 @@ function markTask(id,day){const t=S.tasks[id];if(!t||t.deleted)return;
     if(day>dstr()){toast("未来的日子还不能打卡");return;}
     if(day<t.cycleStart||day>=cycEnd(t.cycleStart,t.cycle)){toast("这天不在本周期窗口内");return;}
     if(markedOn(t,day)){toast("这天已经打过卡啦");return;}
-    if(s)advanceSub(s,Number(t.inc)||1,1);
-    t.marks=t.marks||[];t.marks.push({at:now(),day});t.updatedAt=now();
-    const met=cycMet(t);save();
+    if(s&&!sgDriven(s))advanceSub(s,Number(t.inc)||1,1);
+    t.marks=t.marks||[];t.marks.push({at:now(),day});t.doneTotal=(Number(t.doneTotal)||0)+1;t.updatedAt=now();
+    const met=cycMet(t);
+    if(s&&sgDriven(s)&&sgProg(s)>=99.5)toast("🎉 「"+s.title+"」达成！");
+    save();
     if(met){timeLogForm(id);}else toast("已打卡 "+day.slice(5).replace("-","/")+" · 本期 "+t.marks.length+"/"+taskQuota(t));
   }else{
     if(t.done)return;
-    t.done=true;t.doneAt=now();t.updatedAt=now();
-    if(s)advanceSub(s,Number(t.inc)||1,1);
+    t.done=true;t.doneAt=now();t.doneTotal=1;t.updatedAt=now();
+    if(s&&!sgDriven(s))advanceSub(s,Number(t.inc)||1,1);
+    if(s&&sgDriven(s)&&sgProg(s)>=99.5)toast("🎉 「"+s.title+"」达成！");
     save();timeLogForm(id);}}
-/* 撤销：周期任务按日撤销（默认最近一次），并回退拆分目标推进 */
+/* 撤销：周期任务按日撤销（默认最近一次）；driven 拆分目标由推导自动回退 */
 function unmarkTask(id,day){const t=S.tasks[id];if(!t||t.deleted)return;
   const s=subOf(t);
   if(isCyc(t)){
@@ -1069,14 +1103,14 @@ function unmarkTask(id,day){const t=S.tasks[id];if(!t||t.deleted)return;
     let idx=-1;
     if(day)for(let i=ms.length-1;i>=0;i--)if(markDay(ms[i])===day){idx=i;break;}
     if(idx<0)idx=ms.length-1;
-    if(s)advanceSub(s,Number(t.inc)||1,-1);
-    t.marks.splice(idx,1);t.updatedAt=now();
+    if(s&&!sgDriven(s))advanceSub(s,Number(t.inc)||1,-1);
+    t.marks.splice(idx,1);t.doneTotal=Math.max(0,(Number(t.doneTotal)||ms.length)-1);t.updatedAt=now();
     if(!t.marks.length){t.timeStart="";t.timeEnd="";}
     save();
   }else{
     if(!t.done)return;
-    t.done=false;t.doneAt=null;t.timeStart="";t.timeEnd="";t.updatedAt=now();
-    if(s)advanceSub(s,Number(t.inc)||1,-1);save();}}
+    t.done=false;t.doneAt=null;t.doneTotal=0;t.timeStart="";t.timeEnd="";t.updatedAt=now();
+    if(s&&!sgDriven(s))advanceSub(s,Number(t.inc)||1,-1);save();}}
 function toggleTask(id,day){const t=S.tasks[id];if(!t)return;
   day=day||dstr();
   if(isCyc(t)){
@@ -1106,6 +1140,7 @@ function mottoForm(){
     S.motto={text,updatedAt:now()};save();closeModal();toast("宣言已更新");};
   $("#mt-clear").onclick=()=>{S.motto={text:"",updatedAt:now()};save();closeModal();toast("已清除");};}
 function bumpSub(id){const s=S.subgoals[id];if(!s)return;
+  if(sgDriven(s)){toast("🔗 该拆分目标由关联任务自动计算，去任务列表打卡");return;}
   advanceSub(s,1,sgType(s)==="bool"&&Number(s.current)>=1?-1:1);save();}
 function recordForm(gid){
   openModal('<h3>写复盘 · '+esc(S.goals[gid].title)+'<button class="x" data-act="close">✕</button></h3>'+
@@ -1303,6 +1338,10 @@ if(isEmpty()&&UI.seeded===undefined){S=seedDemo();UI.seeded=true;saveUI();
       if(t.spawnedBy)t.deleted=true; /* 被生成的副本删除，父任务滚动覆盖未来 */
       delete t.repeat;delete t.seq;delete t.spawnId;ch=true;
     }else{t.cycle="none";ch=true;}});
+  /* 周期任务补 origStart/doneTotal（历史窗口计数与累计打卡） */
+  Object.values(S.tasks).forEach(t=>{if(t.deleted||!isCyc(t))return;
+    if(!t.origStart){t.origStart=t.cycleStart;ch=true;}
+    if(t.doneTotal===undefined){t.doneTotal=taskMarks(t).length;ch=true;}});
   if(ch){S.meta.updatedAt=now();try{localStorage.setItem(LS_STATE,JSON.stringify(S));}catch(e){}}})();
 rollAll();
 function init(){render();bootstrapTokenFromHash();if(syncCfg().token)syncPull(true);}
