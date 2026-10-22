@@ -134,6 +134,7 @@ a{color:var(--accent)}
 .task .imp{color:var(--purple-ink);background:var(--chipbg);border-radius:6px;padding:1px 6px;font-weight:700;display:inline-flex;gap:3px;align-items:center}
 .task .star{position:relative;flex:none;width:44px;height:44px;display:grid;place-items:center;font-size:24px}
 .task .star .badge{position:absolute;bottom:0;right:0;background:var(--purple);color:#fff;font-size:10.5px;font-weight:700;border-radius:99px;padding:1.5px 6px;border:2px solid var(--card)}
+.task.todaydone .tt{opacity:.92}
 .task .rep{font-size:10.5px;background:var(--chipbg);color:var(--purple-ink);border-radius:6px;padding:1.5px 7px;margin-left:8px;font-weight:700;white-space:nowrap;vertical-align:2px}
 .fab{position:fixed;right:max(20px,calc(50% - 320px + 20px));bottom:calc(96px + env(safe-area-inset-bottom));z-index:40;
   width:58px;height:58px;border-radius:50%;background:var(--card);color:var(--accent);font-size:30px;font-weight:300;display:grid;place-items:center;box-shadow:var(--shadow2)}
@@ -588,6 +589,7 @@ function dashCard(){
    ============================================================= */
 const TABS=[{id:"sum",ic:"📈",label:"摘要"},{id:"lib",ic:"🎯",label:"目标库"},{id:"task",ic:"📋",label:"任务"},{id:"me",ic:"👤",label:"我的"}];
 function render(){
+  rollAll(); /* 每次渲染先滚动过期周期窗口，保证任何页面下状态一致 */
   UI.tab=UI.tab||"sum";
   $("#tabbar").innerHTML='<div class="desk-brand"><span class="lg">◎</span>VisOKR</div>'+
     TABS.map(t=>'<button data-tab="'+t.id+'" class="'+(t.id===UI.tab?"on":"")+'"><span class="ic">'+t.ic+'</span>'+t.label+'</button>').join("");
@@ -766,7 +768,7 @@ function viewTasks(){
   '<div class="seg">'+["未完成","未计划","已结束"].map(k=>'<button data-ttab="'+k+'" class="'+(tab===k?"on":"")+'">'+k+'</button>').join("")+'</div>'+
   (order.filter(k=>groups[k]&&groups[k].length).map(k=>
     '<div class="tgroup '+(k==="已逾期"?"overdue":"")+'">'+(tab==="未完成"?k+" "+groups[k].length:(tab==="已结束"?(k===t0?"今日":relDay(k))+" "+groups[k].length:"未计划 "+groups[k].length))+'</div>'+
-    groups[k].map(taskRow).join("")).join("")||'<div class="card"><div class="empty">「'+tab+'」暂无任务<br><button class="btn small mt8" data-nav="add-task">＋ 去添加</button></div></div>');
+    groups[k].map(x=>taskRow(x,t0)).join("")).join("")||'<div class="card"><div class="empty">「'+tab+'」暂无任务<br><button class="btn small mt8" data-nav="add-task">＋ 去添加</button></div></div>');
 }
 function viewToday(){
   rollAll();
@@ -781,27 +783,30 @@ function viewToday(){
   '<div class="daystrip">'+days.map(d=>{const ds=dstr(d);const has=all.some(x=>taskCovers(x,ds));
     return '<div class="day '+(ds===UI.pick?"on":"")+'" data-pick="'+ds+'"><div class="w">'+WD[d.getDay()]+'</div><div class="n">'+d.getDate()+'</div>'+(has&&ds!==UI.pick?'<div class="has"></div>':'')+'</div>';}).join("")+'</div>'+
   '<div class="tgroup">未完成 '+list.length+(doneList.length?' · 已完成 '+doneList.length:'')+'</div>'+
-  (list.length?list.map(taskRow).join(""):'')+
-  (doneList.length?'<div class="tgroup">已完成 '+doneList.length+'</div>'+doneList.map(taskRow).join(""):'')+
+  (list.length?list.map(x=>taskRow(x,UI.pick)).join(""):'')+
+  (doneList.length?'<div class="tgroup">已完成 '+doneList.length+'</div>'+doneList.map(x=>taskRow(x,UI.pick)).join(""):'')+
   (!list.length&&!doneList.length?'<div class="card"><div class="empty">'+(UI.pick===dstr()?"今天没有待办，休息也是进度 🌿":"这天没有任务")+'<br><button class="btn small mt8" data-nav="add-task">＋ 添加任务</button></div></div>':'');
 }
-function taskRow(t){
+function taskRow(t,dayCtx){
   const g=t.goalId&&S.goals[t.goalId]&&!S.goals[t.goalId].deleted?S.goals[t.goalId]:null;
   const s=subOf(t);
   const imp=g&&s?goalImpactPct(g.id,s.id,t.inc||1):0;
   const c=g?goalColor(g):null;
   const cyc=isCyc(t),met=cyc&&cycMet(t),done=cyc?met:t.done;
+  const ds=dayCtx||dstr();
+  const dayDone=cyc&&markedOn(t,ds);
   const mk=taskMarks(t).length,q=taskQuota(t);
   const mt=METRICS[taskMetric(t)]||METRICS.count;
   const meta=[];const overdue=!cyc&&t.due&&t.due<dstr()&&!done;
-  if(cyc){meta.push(REPEATS[t.cycle]+"任务");meta.push("本窗口 "+t.cycleStart.slice(5).replace("-","/")+" ~ "+cycEnd(t.cycleStart,t.cycle).slice(5).replace("-","/")+"（含前）");}
+  if(cyc){meta.push(REPEATS[t.cycle]+"任务·每日一次");meta.push("窗口 "+t.cycleStart.slice(5).replace("-","/")+" ~ "+cycEnd(t.cycleStart,t.cycle).slice(5).replace("-","/")+"（含前）");if(met)meta.push("本期已满 ✓");else if(dayDone)meta.push("今日已打卡 ✓");}
   else if(t.due){meta.push(WD[pdate(t.due).getDay()]);meta.push(relDay(t.due));}
   if(done&&t.timeStart)meta.push(t.timeStart+(t.timeEnd?" - "+t.timeEnd:""));
   else if(t.time)meta.push(t.time);
   const repTag=cyc?'<span class="rep">🔁 '+REPEATS[t.cycle]+(q>1?' · '+mk+'/'+q:'')+'</span>':'';
-  const cbLabel=cyc&&!done&&mk>0?'<span style="font-size:11px;font-weight:800;color:'+c+'">'+mk+'</span>':'';
-  return '<div class="task '+(done?"done":"")+'" data-task-open="'+t.id+'"'+(c&&!done?' style="background:color-mix(in srgb,'+c+' 9%,var(--card))"':'')+'>'+
-    '<button class="cb" data-toggle="'+t.id+'"'+(c?' style="border-color:'+c+';'+(done?"background:"+c:"")+'"':'')+'>'+(done?"✓":cbLabel)+'</button>'+
+  const cbFill=done||dayDone;
+  const cbInner=cbFill?"✓":(cyc&&mk>0?'<span style="font-size:11px;font-weight:800;color:'+(c||"inherit")+'">'+mk+'</span>':'');
+  return '<div class="task '+(done?"done":"")+(dayDone&&!met?" todaydone":"")+'" data-task-open="'+t.id+'"'+(c&&!done?' style="background:color-mix(in srgb,'+c+' 9%,var(--card))"':'')+'>'+
+    '<button class="cb" data-toggle="'+t.id+'"'+(c?' style="border-color:'+c+';'+(cbFill?"background:"+(met?c:"transparent")+";color:"+(met?"#fff":c):"")+'"':(cbFill?' style="background:var(--purple);color:#fff"':''))+'>'+cbInner+'</button>'+
     '<div class="bd"><div class="tt"'+(c&&!done?' style="color:'+c+'"':'')+'>'+esc(t.title)+repTag+'</div>'+
     (meta.length?'<div class="meta '+(overdue?"overdue":"")+'">'+meta.join(" · ")+(overdue?" · 逾期":"")+'</div>':'<div class="meta">未计划</div>')+
     (t.note?'<div class="meta">备注：'+esc(t.note)+'</div>':'')+
@@ -1037,33 +1042,49 @@ function advanceSub(s,inc,dir){ /* dir=1 完成推进, -1 撤销 */
   s.updatedAt=now();
   if(sgProg(s)>=99.5&&dir>0)toast("🎉 「"+s.title+"」达成！");}
 function subOf(t){return t.subgoalId&&S.subgoals[t.subgoalId]&&!S.subgoals[t.subgoalId].deleted?S.subgoals[t.subgoalId]:null;}
-/* 标记一次：周期任务累计次数，满额度自动完成本期 */
-function markTask(id){const t=S.tasks[id];if(!t||t.deleted)return;
-  const s=subOf(t);
+/* 标记：周期任务每个自然日最多一次（marks 带 day），满额度自动完成本期 */
+function markDay(m){return m.day||dstr(new Date(m.at||now()));}
+function markedOn(t,ds){return taskMarks(t).some(m=>markDay(m)===ds);}
+function markTask(id,day){const t=S.tasks[id];if(!t||t.deleted)return;
+  const s=subOf(t);day=day||dstr();
   if(isCyc(t)){
     if(cycMet(t))return;
+    if(day>dstr()){toast("未来的日子还不能打卡");return;}
+    if(day<t.cycleStart||day>=cycEnd(t.cycleStart,t.cycle)){toast("这天不在本周期窗口内");return;}
+    if(markedOn(t,day)){toast("这天已经打过卡啦");return;}
     if(s)advanceSub(s,Number(t.inc)||1,1);
-    t.marks=t.marks||[];t.marks.push({at:now()});t.updatedAt=now();
+    t.marks=t.marks||[];t.marks.push({at:now(),day});t.updatedAt=now();
     const met=cycMet(t);save();
-    if(met){timeLogForm(id);}else toast("已标记 "+t.marks.length+"/"+taskQuota(t));
+    if(met){timeLogForm(id);}else toast("已打卡 "+day.slice(5).replace("-","/")+" · 本期 "+t.marks.length+"/"+taskQuota(t));
   }else{
     if(t.done)return;
     t.done=true;t.doneAt=now();t.updatedAt=now();
     if(s)advanceSub(s,Number(t.inc)||1,1);
     save();timeLogForm(id);}}
-/* 撤销一次标记（回退拆分目标推进） */
-function unmarkTask(id){const t=S.tasks[id];if(!t||t.deleted)return;
+/* 撤销：周期任务按日撤销（默认最近一次），并回退拆分目标推进 */
+function unmarkTask(id,day){const t=S.tasks[id];if(!t||t.deleted)return;
   const s=subOf(t);
   if(isCyc(t)){
-    if(!taskMarks(t).length)return;
+    const ms=taskMarks(t);if(!ms.length)return;
+    let idx=-1;
+    if(day)for(let i=ms.length-1;i>=0;i--)if(markDay(ms[i])===day){idx=i;break;}
+    if(idx<0)idx=ms.length-1;
     if(s)advanceSub(s,Number(t.inc)||1,-1);
-    t.marks.pop();t.updatedAt=now();save();
+    t.marks.splice(idx,1);t.updatedAt=now();
+    if(!t.marks.length){t.timeStart="";t.timeEnd="";}
+    save();
   }else{
     if(!t.done)return;
     t.done=false;t.doneAt=null;t.timeStart="";t.timeEnd="";t.updatedAt=now();
     if(s)advanceSub(s,Number(t.inc)||1,-1);save();}}
-function toggleTask(id){const t=S.tasks[id];if(!t)return;
-  if(taskActive(t))markTask(id);else unmarkTask(id);}
+function toggleTask(id,day){const t=S.tasks[id];if(!t)return;
+  day=day||dstr();
+  if(isCyc(t)){
+    if(markedOn(t,day))unmarkTask(id,day);
+    else if(cycMet(t))unmarkTask(id);   /* 已满且今日未打：撤销最近一次（从已结束回退） */
+    else markTask(id,day);
+    return;}
+  if(t.done)unmarkTask(id);else markTask(id);}
 /* 完成时记录实际起止时间（可跳过） */
 function timeLogForm(tid){const t=S.tasks[tid];if(!t)return;
   const met=isCyc(t)?cycMet(t):t.done;if(!met)return;
@@ -1169,7 +1190,8 @@ document.body.addEventListener("click",e=>{
   const pick=e.target.closest("[data-pick]");
   if(pick){UI.pick=pick.getAttribute("data-pick");render();return;}
   const tog=e.target.closest("[data-toggle]");
-  if(tog){e.stopPropagation();toggleTask(tog.getAttribute("data-toggle"));return;}
+  if(tog){e.stopPropagation();const dctx=(UI.view&&UI.view.name==="today")?(UI.pick||dstr()):dstr();
+    toggleTask(tog.getAttribute("data-toggle"),dctx);return;}
   const bump=e.target.closest("[data-bump]");
   if(bump){e.stopPropagation();bumpSub(bump.getAttribute("data-bump"));return;}
   const esub=e.target.closest("[data-edit-sub]");
