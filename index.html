@@ -327,6 +327,7 @@ const METRICS={count:{label:"计数",icon:"⭐",defInc:1},percent:{label:"百分
 function isCyc(t){return t.cycle&&t.cycle!=="none";}
 function taskQuota(t){return Math.max(1,Number(t.quota)||1);}
 function taskMarks(t){return Array.isArray(t.marks)?t.marks:[];}
+function curMarks(t){return taskMarks(t).filter(m=>t.cycleStart&&markDay(m)>=t.cycleStart);}
 function cycEnd(start,cycle){const d=pdate(start)||new Date();
   if(cycle==="weekly")d.setDate(d.getDate()+7);
   else if(cycle==="biweekly")d.setDate(d.getDate()+14);
@@ -335,13 +336,13 @@ function cycEnd(start,cycle){const d=pdate(start)||new Date();
     const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();d.setDate(Math.min(day,last));/* 月末钳制：1/31→2/28 */}
   return dstr(d);}
 function rollTask(t){if(!isCyc(t)||!t.cycleStart)return false;let ch=false,guard=0;
-  while(cycEnd(t.cycleStart,t.cycle)<=dstr()&&guard++<500){t.cycleStart=cycEnd(t.cycleStart,t.cycle);t.marks=[];ch=true;}
+  while(cycEnd(t.cycleStart,t.cycle)<=dstr()&&guard++<500){t.cycleStart=cycEnd(t.cycleStart,t.cycle);ch=true;}
   return ch;}
 function rollAll(){let ch=false;Object.values(S.tasks).forEach(t=>{if(!t.deleted&&rollTask(t))ch=true;});
   if(ch){S.meta.updatedAt=now();try{localStorage.setItem(LS_STATE,JSON.stringify(S));}catch(e){}queuePush();}}
-function cycMet(t){return isCyc(t)&&taskMarks(t).length>=taskQuota(t);}
+function cycMet(t){return isCyc(t)&&curMarks(t).length>=taskQuota(t);}
 function taskActive(t){return isCyc(t)?!cycMet(t):!t.done;}
-function taskDoneAt(t){if(isCyc(t)){const ms=taskMarks(t);return cycMet(t)&&ms.length?ms[ms.length-1].at:0;}return t.doneAt||0;}
+function taskDoneAt(t){if(isCyc(t)){const ms=curMarks(t);return cycMet(t)&&ms.length?ms[ms.length-1].at:0;}return t.doneAt||0;}
 function taskCovers(t,ds){if(isCyc(t))return !!t.cycleStart&&ds>=t.cycleStart&&ds<cycEnd(t.cycleStart,t.cycle);return t.due===ds;}
 function taskMetric(t){return t.metric||"count";}
 /* ---------- 任务驱动型拆分目标：当前值由关联任务自动计算 ---------- */
@@ -655,44 +656,70 @@ function heatGrid(){
     const bg=lvl===0?"var(--chipbg)":"color-mix(in srgb, var(--purple) "+(18+lvl*26)+"%, var(--card))";
     cells+='<div class="heatcell" title="'+dstr(d)+(n?" · "+n+" 条复盘":"")+'" style="background:'+bg+'"></div>';}
   return '<div class="heatgrid">'+cells+'</div>';}
-/* 趋势重建：按复盘时间线还原整体进度（每条复盘存了当时快照 progressAt） */
-function trendPoints(){
-  const gs=Object.values(S.goals).filter(g=>!g.deleted&&!g.archived);
-  if(!gs.length)return [];
-  const rs=Object.values(S.records).filter(r=>!r.deleted&&gs.some(g=>g.id===r.goalId))
-    .sort((a,b)=>a.date.localeCompare(b.date)||a.createdAt-b.createdAt);
-  if(!rs.length)return [];
-  const latest={};const pts=[];
-  rs.forEach(r=>{latest[r.goalId]=Number(r.progressAt)||0;
-    const sum=gs.reduce((a,g)=>a+(latest[g.id]!=null?latest[g.id]:0),0);
-    pts.push({date:r.date,val:sum/gs.length});});
-  const last=pts[pts.length-1];
-  const cur=gs.reduce((a,g)=>a+goalProg(g.id),0)/gs.length;
-  if(last.date<dstr())pts.push({date:dstr(),val:cur});else pts[pts.length-1]={date:dstr(),val:cur};
-  return pts;}
-function trendChart(pts){
-  if(pts.length<2)return '<div class="empty small">复盘 2 条后出现趋势曲线</div>';
-  const W=320,H=140,P=10;
-  const xs=pts.map((p,i)=>P+i*(W-2*P)/(pts.length-1));
-  const ys=pts.map(p=>H-P-(clamp(p.val,0,100)/100)*(H-2*P));
-  const line=xs.map((x,i)=>x.toFixed(1)+","+ys[i].toFixed(1)).join(" ");
-  const area=line+" "+xs[xs.length-1].toFixed(1)+","+(H-P)+" "+P+","+(H-P);
-  let grid="";[25,50,75].forEach(g=>{const y=(H-P-g/100*(H-2*P)).toFixed(1);
+/* ---------- v4.2 打卡热力 & 实际vs推荐 ---------- */
+function markDayCount(){const cnt={},rev={};
+  Object.values(S.tasks).forEach(t=>{if(t.deleted)return;
+    if(isCyc(t))taskMarks(t).forEach(m=>{const d=markDay(m);cnt[d]=(cnt[d]||0)+1;});
+    else if(t.done&&t.doneAt){const d=dstr(new Date(t.doneAt));cnt[d]=(cnt[d]||0)+1;}});
+  Object.values(S.records).forEach(r=>{if(!r.deleted)rev[r.date]=(rev[r.date]||0)+1;});
+  return{cnt,rev};}
+function heatGrid2(){const{cnt,rev}=markDayCount();
+  let cells="";const today=new Date();
+  for(let i=90;i>=0;i--){const d=new Date(today.getTime()-i*864e5);const ds=dstr(d);const n=cnt[ds]||0;
+    const lvl=n===0?0:Math.min(3,n);
+    const bg=lvl===0?"var(--chipbg)":"color-mix(in srgb, var(--ok) "+(20+lvl*24)+"%, var(--card))";
+    const ring=rev[ds]?"box-shadow:inset 0 0 0 1.6px var(--purple);":"";
+    cells+='<div class="heatcell" title="'+ds+(n?" · 打卡 "+n+" 次":"")+(rev[ds]?" · 复盘 "+rev[ds]:"")+'" style="background:'+bg+';'+ring+'"></div>';}
+  return '<div class="heatgrid">'+cells+'</div>';}
+function markStreak(){const{cnt}=markDayCount();const set=new Set(Object.keys(cnt));
+  if(!set.size)return 0;let d=new Date();if(!set.has(dstr(d)))d=new Date(d.getTime()-864e5);
+  let n=0;while(set.has(dstr(d))){n++;d=new Date(d.getTime()-864e5);}return n;}
+function paceSeries(){
+  const cyc=Object.values(S.tasks).filter(t=>!t.deleted&&isCyc(t)&&t.origStart);
+  const one=Object.values(S.tasks).filter(t=>!t.deleted&&!isCyc(t)&&t.due);
+  if(!cyc.length&&!one.length)return null;
+  let start=dstr();
+  cyc.forEach(t=>{if(t.origStart<start)start=t.origStart;});
+  one.forEach(t=>{if(t.due<start)start=t.due;});
+  const floor=dstr(new Date(now()-90*864e5));if(start<floor)start=floor;
+  const days=[];for(let d=pdate(start);dstr(d)<=dstr();d=new Date(d.getTime()+864e5))days.push(dstr(d));
+  if(days.length<2)return null;
+  const markByDay={};
+  cyc.forEach(t=>taskMarks(t).forEach(m=>{const dd=markDay(m);markByDay[dd]=(markByDay[dd]||0)+1;}));
+  one.forEach(t=>{if(t.done&&t.doneAt){const dd=dstr(new Date(t.doneAt));markByDay[dd]=(markByDay[dd]||0)+1;}});
+  const act=[],exp=[];let ca=0;
+  days.forEach(ds=>{
+    ca+=markByDay[ds]||0;act.push(ca);
+    let e=0;
+    cyc.forEach(t=>{let n=0,cs=t.origStart;while(cs<=ds&&n<600){n++;cs=cycEnd(cs,t.cycle);}e+=n*taskQuota(t);});
+    one.forEach(t=>{if(t.due<=ds)e+=1;});
+    exp.push(e);});
+  return{days,act,exp};}
+function paceChart(){const s=paceSeries();
+  if(!s||!s.exp.length||!s.exp[s.exp.length-1])return '<div class="empty small">创建周期任务后，这里对比「实际打卡 vs 推荐量」</div>';
+  const W=320,H=140,P=10,n=s.days.length;
+  const max=Math.max(s.exp[n-1],s.act[n-1],1);
+  const xs=i=>P+i*(W-2*P)/(n-1), ys=v=>H-P-(v/max)*(H-2*P);
+  const line=a=>a.map((v,i)=>xs(i).toFixed(1)+","+ys(v).toFixed(1)).join(" ");
+  const area=line(s.act)+" "+xs(n-1).toFixed(1)+","+(H-P)+" "+P+","+(H-P);
+  let grid="";[0.5,1].forEach(f=>{const y=(H-P-f*(H-2*P)).toFixed(1);
     grid+='<line x1="'+P+'" x2="'+(W-P)+'" y1="'+y+'" y2="'+y+'" style="stroke:var(--line)" stroke-dasharray="3 4"/>';});
+  const gap=s.exp[n-1]-s.act[n-1];
+  const verdict=gap<=0?'<b style="color:var(--ok)">超前 '+(-gap)+' 次 💪</b>':'<b style="color:var(--warn)">欠账 '+gap+' 次</b>';
   return '<div class="trend-wrap"><svg viewBox="0 0 '+W+' '+H+'">'+grid+
     '<polygon points="'+area+'" fill="url(#gTrend)"/>'+
-    '<polyline points="'+line+'" fill="none" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" style="stroke:var(--purple)"/>'+
-    pts.map((p,i)=>'<circle cx="'+xs[i].toFixed(1)+'" cy="'+ys[i].toFixed(1)+'" r="2.6" style="fill:var(--card);stroke:var(--purple)" stroke-width="1.6"/>').join("")+
-    '<circle cx="'+xs[xs.length-1].toFixed(1)+'" cy="'+ys[ys.length-1].toFixed(1)+'" r="4" style="fill:var(--purple)"/></svg>'+
-    '<div class="trend-x"><span>'+pts[0].date.slice(5).replace("-","/")+'</span><span>'+pts[pts.length-1].date.slice(5).replace("-","/")+' · 现在 '+Math.round(pts[pts.length-1].val)+'%</span></div></div>';}
-/* 摘要页数据看板：趋势 + 热力 + streak */
+    '<polyline points="'+line(s.exp)+'" fill="none" stroke-width="2" stroke-dasharray="5 5" style="stroke:var(--muted)"/>'+
+    '<polyline points="'+line(s.act)+'" fill="none" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" style="stroke:var(--ok)"/>'+
+    '<circle cx="'+xs(n-1).toFixed(1)+'" cy="'+ys(s.act[n-1]).toFixed(1)+'" r="3.6" style="fill:var(--ok)"/></svg>'+
+    '<div class="trend-x"><span>'+s.days[0].slice(5).replace("-","/")+'</span><span>实际 <b style="color:var(--ok)">'+s.act[n-1]+'</b> / 推荐 '+s.exp[n-1]+' · '+verdict+'</span></div></div>';}
+/* 摘要页数据看板：打卡节奏 + 打卡热力 */
 function dashCard(){
-  const pts=trendPoints();const streak=recordStreak();
+  const mkStreak=markStreak();
   const recCnt=Object.values(S.records).filter(r=>!r.deleted).length;
   return '<div class="card"><div class="dash2">'+
-    '<div><h4>📈 进度趋势<span class="sub">按复盘快照重建</span></h4>'+trendChart(pts)+'</div>'+
-    '<div><h4>🗓 复盘热力<span class="sub">近 91 天'+(streak>0?' · <span class="streak">🔥'+streak+' 天</span>':'')+'</span></h4>'+heatGrid()+
-    '<div class="small muted mt8">共 '+recCnt+' 条复盘 · 每目标每周 ≥1 次效果最好</div></div>'+
+    '<div><h4>📈 打卡节奏<span class="sub">实际 vs 推荐量</span></h4>'+paceChart()+'</div>'+
+    '<div><h4>🗓 打卡热力<span class="sub">近 91 天'+(mkStreak>0?' · <span class="streak">🔥连续 '+mkStreak+' 天</span>':'')+'</span></h4>'+heatGrid2()+
+    '<div class="small muted mt8">深浅=当天打卡次数 · 紫框=当天写过复盘 · 共 '+recCnt+' 条复盘</div></div>'+
   '</div></div>';}
 
 /* =============================================================
@@ -935,7 +962,7 @@ function taskRow(t,dayCtx,mode){
   const cyc=isCyc(t),met=cyc&&cycMet(t),done=cyc?met:t.done;
   const ds=dayCtx||dstr();
   const dayDone=cyc&&markedOn(t,ds);
-  const mk=taskMarks(t).length,q=taskQuota(t);
+  const mk=curMarks(t).length,q=taskQuota(t);
   const mt=METRICS[taskMetric(t)]||METRICS.count;
   const compact=mode==="compact",nomark=mode==="nomark";
   /* 简化版：非今日任务只读展示，不提供打卡 */
@@ -1212,7 +1239,7 @@ function markTask(id,day){const t=S.tasks[id];if(!t||t.deleted)return;
     const met=cycMet(t);
     if(s&&sgDriven(s)&&sgProg(s)>=99.5)toast("🎉 「"+s.title+"」达成！");
     save();
-    if(met){timeLogForm(id);}else toast("已打卡 "+day.slice(5).replace("-","/")+" · 本期 "+t.marks.length+"/"+taskQuota(t));
+    if(met){timeLogForm(id);}else toast("已打卡 "+day.slice(5).replace("-","/")+" · 本期 "+curMarks(t).length+"/"+taskQuota(t));
   }else{
     if(t.done)return;
     t.done=true;t.doneAt=now();t.doneTotal=1;t.updatedAt=now();
@@ -1223,13 +1250,14 @@ function markTask(id,day){const t=S.tasks[id];if(!t||t.deleted)return;
 function unmarkTask(id,day){const t=S.tasks[id];if(!t||t.deleted)return;
   const s=subOf(t);
   if(isCyc(t)){
-    const ms=taskMarks(t);if(!ms.length)return;
-    let idx=-1;
-    if(day)for(let i=ms.length-1;i>=0;i--)if(markDay(ms[i])===day){idx=i;break;}
-    if(idx<0)idx=ms.length-1;
+    const cm=curMarks(t);if(!cm.length)return;
+    let target=null;
+    if(day)for(let i=cm.length-1;i>=0;i--)if(markDay(cm[i])===day){target=cm[i];break;}
+    if(!target)target=cm[cm.length-1];
+    const idx=t.marks.indexOf(target);if(idx<0)return;
     if(s&&!sgDriven(s))advanceSub(s,Number(t.inc)||1,-1);
-    t.marks.splice(idx,1);t.doneTotal=Math.max(0,(Number(t.doneTotal)||ms.length)-1);t.updatedAt=now();
-    if(!t.marks.length){t.timeStart="";t.timeEnd="";}
+    t.marks.splice(idx,1);t.doneTotal=Math.max(0,(Number(t.doneTotal)||taskMarks(t).length+1)-1);t.updatedAt=now();
+    if(!curMarks(t).length){t.timeStart="";t.timeEnd="";}
     save();
   }else{
     if(!t.done)return;
