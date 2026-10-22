@@ -1486,8 +1486,34 @@ function saveSyncFromForm(){
   toast("已保存配置，正在测试连接…");syncPull(false);
 }
 function copyLink(){const c=syncCfg();if(!c.token){toast("请先保存令牌");return;}
-  const url=location.href.split("#")[0]+"#t="+encodeURIComponent(c.token);
-  navigator.clipboard?.writeText(url).then(()=>toast("链接已复制：发给自己后记得撤回"),()=>toast("复制失败"));}
+  const url=location.origin+location.pathname+"#t="+encodeURIComponent(c.token);
+  const done=()=>toast("✅ 链接已复制：发给自己后记得撤回");
+  const fail=()=>copyLinkModal(url);
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(url).then(done,()=>{legacyCopy(url)?done():fail();});
+      return;}
+  }catch(e){}
+  legacyCopy(url)?done():fail();}
+function legacyCopy(text){try{
+  const ta=document.createElement("textarea");ta.value=text;ta.contentEditable="true";ta.readOnly=false;
+  ta.style.cssText="position:fixed;left:-2000px;top:10px;opacity:0";
+  document.body.appendChild(ta);
+  const sel=window.getSelection();const range=document.createRange();
+  range.selectNodeContents(ta);sel.removeAllRanges();sel.addRange(range);
+  ta.setSelectionRange(0,text.length);
+  let okk=false;try{okk=document.execCommand("copy");}catch(e){}
+  document.body.removeChild(ta);return !!okk;}catch(e){return false;}}
+function copyLinkModal(url){
+  openModal('<h3>连接链接<button class="x" data-act="close">✕</button></h3>'+
+    '<div class="small muted mb8">自动复制被浏览器拦了。<b>长按下方输入框 → 全选 → 拷贝</b>，或点「再试一次」：</div>'+
+    '<input type="text" id="cl-url" value="'+esc(url)+'" style="font-size:12px" readonly>'+
+    '<div class="row mt12"><button class="btn" id="cl-retry">↻ 再试一次</button><button class="btn primary" data-act="close" style="flex:1">知道了</button></div>'+
+    '<div class="small muted mt8">链接含令牌，只发给自己（微信文件传输助手等），复制后建议撤回消息。</div>');
+  const inp=$("#cl-url");
+  const selAll=()=>{inp.removeAttribute("readonly");inp.focus();inp.setSelectionRange(0,inp.value.length);inp.setAttribute("readonly","");};
+  inp.onclick=selAll;selAll();
+  $("#cl-retry").onclick=()=>{legacyCopy(url)?(toast("✅ 已复制"),closeModal()):toast("仍失败，请长按输入框手动全选拷贝");};}
 async function diagnose(){const box=$("#diag");if(!box)return;box.style.display="block";
   const lines=[];const push=s=>{lines.push(s);box.textContent=lines.join("\n");};
   const c=syncCfg();
