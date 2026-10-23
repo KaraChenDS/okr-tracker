@@ -1055,11 +1055,15 @@ function taskRow(t,dayCtx,mode){
   if(done&&t.timeStart)meta.push(t.timeStart+(t.timeEnd?" - "+t.timeEnd:""));
   else if(t.time)meta.push(t.time);
   const repTag=cyc?'<span class="rep">🔁 '+REPEATS[t.cycle]+(q>1?' · '+mk+'/'+q:'')+'</span>':'';
-  const cbFill=done||dayDone;
-  const cbInner=cbFill?"✓":(cyc&&mk>0?'<span style="font-size:11px;font-weight:800;color:'+(c||"inherit")+'">'+mk+'</span>':'');
+  /* ✓ 只代表"本期完成"；今日已打卡但未满额 → 圆圈显示当前次数+浅底 */
+  const cbInner=done?"✓":(cyc&&mk>0?'<span style="font-size:11px;font-weight:800">'+mk+'</span>':'');
+  let cbStyle="";
+  if(c)cbStyle+="border-color:"+c+";";
+  if(done)cbStyle+="background:"+(c||"var(--purple)")+";color:#fff;";
+  else if(dayDone)cbStyle+="background:color-mix(in srgb,"+(c||"var(--purple)")+" 18%,var(--card));color:"+(c||"var(--purple)")+";font-weight:800;";
   const cbHtml=nomark
-    ?'<span class="cb" style="opacity:.4;'+(cbFill?"background:"+(c||"var(--purple)")+";color:#fff":(c?"border-color:"+c:""))+'">'+(cbFill?"✓":"")+'</span>'
-    :'<button class="cb" data-toggle="'+t.id+'"'+(c?' style="border-color:'+c+';'+(cbFill?"background:"+(met?c:"transparent")+";color:"+(met?"#fff":c):"")+'"':(cbFill?' style="background:var(--purple);color:#fff"':''))+'>'+cbInner+'</button>';
+    ?'<span class="cb" style="opacity:.4;'+cbStyle+'">'+cbInner+'</span>'
+    :'<button class="cb" data-toggle="'+t.id+'"'+(cbStyle?' style="'+cbStyle+'"':'')+'>'+cbInner+'</button>';
   return '<div class="task '+(done?"done":"")+(dayDone&&!met?" todaydone":"")+'" data-task-open="'+t.id+'"'+(c&&!done?' style="background:color-mix(in srgb,'+c+' 9%,var(--card))"':'')+'>'+
     cbHtml+
     '<div class="bd"><div class="tt"'+(c&&!done?' style="color:'+c+'"':'')+'>'+esc(t.title)+repTag+'</div>'+
