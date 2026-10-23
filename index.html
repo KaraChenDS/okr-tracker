@@ -122,18 +122,21 @@ a{color:var(--accent)}
 .sg .sgp{position:absolute;top:8px;left:12px;font-size:10.5px;background:rgba(0,0,0,.18);border-radius:6px;padding:1px 6px}
 .goal-card .gc-head{cursor:pointer}
 .goal-card .date{font-size:12.5px;color:var(--muted);margin:4px 0 10px;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.goal-card .t{overflow-wrap:anywhere}
+.sg .t{overflow-wrap:anywhere}
 
 /* ============ 目标库 ============ */
 .grouplist .grow{display:flex;align-items:center;gap:10px;padding:15px 16px;background:var(--card);border-radius:18px;box-shadow:var(--shadow);margin-bottom:12px;font-size:16px;font-weight:700;cursor:pointer}
-.grouplist .grow .cnt{margin-left:auto;color:var(--muted);font-weight:400;font-size:15px}
+.grouplist .grow .cnt{color:var(--muted);font-weight:400;font-size:15px;flex:none}
+.gname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .grouplist .grow .gt{color:var(--muted);font-size:13px}
 .sect{font-size:17px;font-weight:800;margin:18px 4px 10px;display:flex;align-items:center}
-.tabs{display:flex;gap:22px;padding:2px 4px 10px;border-bottom:1px solid var(--line);margin-bottom:14px;overflow-x:auto}
-.tabs button{font-size:16px;font-weight:700;position:relative;padding:6px 0;white-space:nowrap}
+.tabs{display:flex;flex-wrap:wrap;gap:4px 18px;padding:2px 4px 6px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.tabs button{font-size:16px;font-weight:700;position:relative;padding:6px 2px 12px;white-space:nowrap}
 .tabs button .c{color:var(--muted);font-weight:600;font-size:14px}
 .tabs button.on{color:var(--accent)}
 .tabs button.on .c{color:var(--accent)}
-.tabs button.on::after{content:"";position:absolute;left:50%;transform:translateX(-50%);bottom:-10px;width:22px;height:4px;border-radius:4px;background:var(--accent)}
+.tabs button.on::after{content:"";position:absolute;left:50%;transform:translateX(-50%);bottom:4px;width:22px;height:4px;border-radius:4px;background:var(--accent)}
 
 /* ============ 任务 ============ */
 .seg{display:flex;background:var(--segbg);border-radius:14px;padding:3px;margin-bottom:16px}
@@ -915,8 +918,8 @@ function viewLib(){
   const all=Object.values(S.goals).filter(g=>!g.deleted).length;
   return titleBar("目标库",'<button class="circbtn" data-act="new-group">＋</button>')+
   '<div class="sect">目标组</div><div class="grouplist">'+
-    '<div class="grow" data-group="__all"><span>🎯</span>全部目标<span class="cnt">'+all+'</span><span class="gt">›</span></div>'+
-    groups.map(x=>'<div class="grow" data-group="'+x.id+'"><span>'+(x.icon||"📁")+'</span>'+esc(x.name)+'<span class="cnt">'+goalsIn(x.id).length+'</span><button class="iconbtn" style="width:28px;height:28px;font-size:12px;color:var(--muted)" data-act="edit-group" data-id="'+x.id+'">✎</button><span class="gt">›</span></div>').join("")+
+    '<div class="grow" data-group="__all"><span>🎯</span><span class="gname">全部目标</span><span class="cnt">'+all+'</span><span class="gt">›</span></div>'+
+    groups.map(x=>'<div class="grow" data-group="'+x.id+'"><span>'+(x.icon||"📁")+'</span><span class="gname">'+esc(x.name)+'</span><span class="cnt">'+goalsIn(x.id).length+'</span><button class="iconbtn" style="width:28px;height:28px;font-size:12px;color:var(--muted)" data-act="edit-group" data-id="'+x.id+'">✎</button><span class="gt">›</span></div>').join("")+
   '</div>';}
 function viewGroup(gid){
   const isAll=gid==="__all";
