@@ -455,13 +455,15 @@ function dayStat(ds){let act=0,fin=0;
   return{act,fin};}
 function dotWrap(st){if(!st.act&&!st.fin)return'<span class="dotslot"></span>';
   return'<span class="dotslot">'+(st.act&&st.fin?'<i class="dotmix"></i>':st.act?'<i class="dotact"></i>':'<i class="dotfin"></i>')+'</span>';}
-function shiftPick(k){const p=pdate(UI.pick||dstr());const mode=UI.calMode||"week";
-  if(k===0)UI.pick=dstr();
-  else if(mode==="week")p.setDate(p.getDate()+k*7);
-  else if(mode==="month"){const day=p.getDate();p.setDate(1);p.setMonth(p.getMonth()+k);
-    const last=new Date(p.getFullYear(),p.getMonth()+1,0).getDate();p.setDate(Math.min(day,last));}
-  else p.setFullYear(p.getFullYear()+k);
-  UI.pick=dstr(p);saveUI();render();}
+function shiftPick(k){const mode=UI.calMode||"week";
+  if(k===0){UI.pick=dstr();}
+  else{const p=pdate(UI.pick||dstr());
+    if(mode==="week")p.setDate(p.getDate()+k*7);
+    else if(mode==="month"){const day=p.getDate();p.setDate(1);p.setMonth(p.getMonth()+k);
+      const last=new Date(p.getFullYear(),p.getMonth()+1,0).getDate();p.setDate(Math.min(day,last));}
+    else p.setFullYear(p.getFullYear()+k);
+    UI.pick=dstr(p);}
+  saveUI();render();}
 function dpf(id,value,ph){return '<div class="dpf'+(value?"":" empty")+'" id="'+id+'" data-value="'+esc(value||"")+'">'+(value||esc(ph||"选择日期"))+'</div>';}
 function dpVal(id){const el=document.getElementById(id);return (el&&el.dataset.value)||"";}
 function dpSet(id,v){const el=document.getElementById(id);el.dataset.value=v||"";el.textContent=v||"选择日期";el.classList.toggle("empty",!v);}
