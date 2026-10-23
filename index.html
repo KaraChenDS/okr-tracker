@@ -177,6 +177,8 @@ a{color:var(--accent)}
 .trend-x{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-top:2px}
 .heatgrid{display:grid;grid-template-columns:repeat(13,1fr);gap:5px;max-width:320px}
 .heatcell{width:12px;height:12px;border-radius:4px;background:var(--chipbg)}
+.color-legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:10px;font-size:11px;color:var(--muted)}
+.color-legend .lg-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:0}
 .streak{display:inline-flex;align-items:center;gap:4px;background:var(--warnbg);color:var(--warn);border-radius:99px;padding:2px 9px;font-size:11.5px;font-weight:800}
 .motto{font-size:14.5px;font-style:italic;line-height:1.6;cursor:pointer;background:linear-gradient(135deg,color-mix(in srgb,var(--purple) 9%,var(--card)),var(--card))}
 .iconbtn{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:var(--muted)}
@@ -196,9 +198,9 @@ a{color:var(--accent)}
 .cd.now{box-shadow:inset 0 0 0 1.5px var(--red)}
 .dotslot{display:block;height:7px;line-height:7px}
 .cd .dotslot i,.day .dotslot i{display:inline-block;width:5px;height:5px;border-radius:50%}
-.dotact{background:var(--purple)}
+.dotact{background:var(--accent)}
 .dotfin{background:var(--ok)}
-.dotmix{background:linear-gradient(90deg,var(--ok) 50%,var(--purple) 50%)}
+.dotmix{background:linear-gradient(90deg,var(--ok) 50%,var(--accent) 50%)}
 .cd.on .dotact,.cd.on .dotfin,.cd.on .dotmix{background:rgba(255,255,255,.9)}
 .day .dotslot{display:block;height:7px;text-align:center}
 .day.now .n{box-shadow:inset 0 0 0 1.6px var(--red)}
@@ -543,7 +545,7 @@ function goalStatus(g){if(g.archived)return"已归档";if(!g.start||!g.end)retur
 function goalPace(g){ /* v1 节奏徽章：进度 vs 时间 */
   const p=goalProg(g.id);
   if(g.archived)return{label:"已归档",cls:""};
-  if(p>=99.5)return{label:"已完成",cls:"done"};
+  if(p>=99.5)return{label:"已完成",cls:"ok"};
   const st=goalStatus(g);
   if(st==="未计划")return{label:"未计划",cls:""};
   if(st==="未开始")return{label:"未开始",cls:""};
@@ -707,14 +709,14 @@ function sparkline(vals,w,h,color){w=w||110;h=h||30;
   const pts=vals.map((v,i)=>{const x=(i/(vals.length-1))*(w-4)+2,y=h-2-(clamp(v,0,100)/100)*(h-4);return x.toFixed(1)+","+y.toFixed(1);});
   const last=pts[pts.length-1].split(",");
   return '<svg width="'+w+'" height="'+h+'" style="vertical-align:middle">'+
-    '<polyline points="'+pts.join(" ")+'" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke:'+(color||"var(--purple)")+'"/>'+
-    '<circle cx="'+last[0]+'" cy="'+last[1]+'" r="2.6" style="fill:'+(color||"var(--purple)")+'"/></svg>';}
+    '<polyline points="'+pts.join(" ")+'" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke:'+(color||"var(--accent)")+'"/>'+
+    '<circle cx="'+last[0]+'" cy="'+last[1]+'" r="2.6" style="fill:'+(color||"var(--accent)")+'"/></svg>';}
 function heatGrid(){
   const days={};Object.values(S.records).forEach(r=>{if(!r.deleted)days[r.date]=(days[r.date]||0)+1;});
   let cells="";const today=new Date();
   for(let i=90;i>=0;i--){const d=new Date(today.getTime()-i*864e5);const n=days[dstr(d)]||0;
     const lvl=n===0?0:Math.min(3,n);
-    const bg=lvl===0?"var(--chipbg)":"color-mix(in srgb, var(--purple) "+(18+lvl*26)+"%, var(--card))";
+    const bg=lvl===0?"var(--chipbg)":"color-mix(in srgb, var(--accent) "+(18+lvl*26)+"%, var(--card))";
     cells+='<div class="heatcell" title="'+dstr(d)+(n?" · "+n+" 条复盘":"")+'" style="background:'+bg+'"></div>';}
   return '<div class="heatgrid">'+cells+'</div>';}
 /* ---------- v4.2 打卡热力 & 实际vs推荐 ---------- */
@@ -729,7 +731,7 @@ function heatGrid2(){const{cnt,rev}=markDayCount();
   for(let i=90;i>=0;i--){const d=new Date(today.getTime()-i*864e5);const ds=dstr(d);const n=cnt[ds]||0;
     const lvl=n===0?0:Math.min(3,n);
     const bg=lvl===0?"var(--chipbg)":"color-mix(in srgb, var(--ok) "+(20+lvl*24)+"%, var(--card))";
-    const ring=rev[ds]?"box-shadow:inset 0 0 0 1.6px var(--purple);":"";
+    const ring=rev[ds]?"box-shadow:inset 0 0 0 1.6px var(--accent);":"";
     cells+='<div class="heatcell" title="'+ds+(n?" · 打卡 "+n+" 次":"")+(rev[ds]?" · 复盘 "+rev[ds]:"")+'" style="background:'+bg+';'+ring+'"></div>';}
   return '<div class="heatgrid">'+cells+'</div>';}
 function markStreak(){const{cnt}=markDayCount();const set=new Set(Object.keys(cnt));
@@ -780,7 +782,8 @@ function dashCard(){
   return '<div class="card"><div class="dash2">'+
     '<div><h4>📈 打卡节奏<span class="sub">实际 vs 推荐量</span></h4>'+paceChart()+'</div>'+
     '<div><h4>🗓 打卡热力<span class="sub">近 91 天'+(mkStreak>0?' · <span class="streak">🔥连续 '+mkStreak+' 天</span>':'')+'</span></h4>'+heatGrid2()+
-    '<div class="small muted mt8">深浅=当天打卡次数 · 紫框=当天写过复盘 · 共 '+recCnt+' 条复盘</div></div>'+
+    '<div class="small muted mt8">深浅(绿)=当天打卡次数 · 蓝框=写过复盘 · 共 '+recCnt+' 条复盘</div>'+
+    '<div class="color-legend"><span><i class="lg-dot" style="background:var(--accent)"></i>蓝=待办/记录</span><span><i class="lg-dot" style="background:var(--ok)"></i>绿=完成</span><span><i class="lg-dot" style="background:var(--warn)"></i>黄=需关注</span><span><i class="lg-dot" style="background:var(--red)"></i>红=紧急/今天</span></div></div>'+
   '</div></div>';}
 
 /* =============================================================
@@ -818,7 +821,7 @@ function viewSum(){
   '<div class="stats">'+
     '<div class="stat"><div class="n"><span class="em">📝</span>'+addedToday+'</div><div class="l">今日添加记录</div></div>'+
     '<div class="stat"><div class="n"><span class="em">⏱</span>'+ongoing.length+'</div><div class="l">进行中目标</div></div>'+
-    '<div class="stat"><div class="n"><span class="em" style="color:var(--red)">🗂</span>'+todayTasks+'</div><div class="l">今日任务</div></div>'+
+    '<div class="stat"><div class="n"><span class="em" style="color:var(--accent)">🗂</span>'+todayTasks+'</div><div class="l">今日任务</div></div>'+
   '</div>'+
   '<div class="card motto" data-act="motto">'+(S.motto&&S.motto.text?'❝ '+esc(S.motto.text):'<span class="muted">＋ 写一句最近的宣言，贴在摘要顶部</span>')+'</div>'+
   quarterCard()+weekStripCard()+dashCard()+
@@ -891,9 +894,9 @@ function goalCard(g,compact){
     (!compact&&open?'<div class="sg-grid">'+ss.map(s=>sgCard(s,gc)).join("")+
       '<div class="sg" style="background:var(--card2);color:var(--muted);border:1.5px dashed var(--line);justify-content:center;align-items:center;display:grid;text-align:center" data-act="new-sub" data-id="'+g.id+'">＋<br>拆分目标</div></div>'+
       '<div class="small muted mt8" style="display:flex;align-items:center;gap:8px">上次复盘 '+(lc?lc.date.slice(5).replace("-","/"):"从未")+
-      (stale?'<span class="chip bad">待更新</span>':'')+
+      (stale?'<span class="chip warn">待更新</span>':'')+
       '<button class="btn small primary" style="margin-left:auto;background:linear-gradient(135deg,'+gc+',color-mix(in srgb,'+gc+' 75%,#000 10%))" data-act="new-record" data-id="'+g.id+'">✍️ 写复盘</button></div>':
-      '<div class="small muted mt8">'+ss.length+' 个拆分目标 · '+(lc?"复盘于 "+lc.date.slice(5).replace("-","/"):"还没复盘过")+(stale?' · <span style="color:var(--red)">该复盘了</span>':'')+'</div>')+
+      '<div class="small muted mt8">'+ss.length+' 个拆分目标 · '+(lc?"复盘于 "+lc.date.slice(5).replace("-","/"):"还没复盘过")+(stale?' · <span style="color:var(--warn)">该复盘了</span>':'')+'</div>')+
   '</div>';
 }
 function sgCard(s,c){
@@ -1180,7 +1183,7 @@ function goalForm(g,preGroup){
       if(s.id&&S.subgoals[s.id])S.subgoals[s.id]=Object.assign(S.subgoals[s.id],{title:s.title.trim(),target:Number(s.target)||10,updatedAt:now()});
       else{const sid=uid();S.subgoals[sid]={id:sid,goalId:id,title:s.title.trim(),type:"count",current:0,target:Number(s.target)||10,createdAt:now(),updatedAt:now(),deleted:false};}});
     if(!isNew)subsOf(id).forEach(s=>{if(!keep.has(s.id)){s.deleted=true;s.updatedAt=now();}});
-    save();closeModal();pushView({name:"goal",id});render();toast(isNew?"目标已创建":"已保存");};
+    save();closeModal();if(UI.tab!=="lib")switchTab("lib");pushView({name:"goal",id});render();toast(isNew?"目标已创建":"已保存");};
   if(!isNew){const id0=g.id;
     $("#go-del").onclick=()=>confirmModal("删除目标「"+esc(g.title)+"」及其拆分目标？",()=>{
       S.goals[id0].deleted=true;S.goals[id0].updatedAt=now();
@@ -1443,11 +1446,11 @@ document.body.addEventListener("click",e=>{
   if(chev){toggleOpen(chev.getAttribute("data-chev"));render();return;}
   if(dragSuppressed)return;
   const openG=e.target.closest("[data-open-goal]");
-  if(openG){UI.tab=openG.closest(".wk")?"sum":UI.tab;pushView({name:"goal",id:openG.getAttribute("data-open-goal")});render();return;}
+  if(openG){if(UI.tab!=="lib")switchTab("lib");pushView({name:"goal",id:openG.getAttribute("data-open-goal")});render();return;}
   const card=e.target.closest("[data-open-card]");
-  if(card){pushView({name:"goal",id:card.getAttribute("data-open-card")});render();return;}
+  if(card){if(UI.tab!=="lib")switchTab("lib");pushView({name:"goal",id:card.getAttribute("data-open-card")});render();return;}
   const sgoal=e.target.closest("[data-side-goal]");
-  if(sgoal){const sid2=sgoal.getAttribute("data-side-goal");if(UI.tab!=="sum")switchTab("sum");pushView({name:"goal",id:sid2});render();return;}
+  if(sgoal){const sid2=sgoal.getAttribute("data-side-goal");if(UI.tab!=="lib")switchTab("lib");pushView({name:"goal",id:sid2});render();return;}
   const grp=e.target.closest("[data-group]");
   if(grp&&!e.target.closest("[data-act]")){pushView({name:"group",id:grp.getAttribute("data-group")});UI.gtab="进行中";saveUI();render();return;}
   const gtab=e.target.closest("[data-gtab]");
