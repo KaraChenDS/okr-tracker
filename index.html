@@ -120,7 +120,7 @@ a{color:var(--accent)}
 }
 .ckrow{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;font-weight:700;cursor:pointer}
 .ckrow input[type=checkbox]{width:19px;height:19px;accent-color:var(--purple);flex:none}
-.sg .sgfill{position:absolute;left:0;right:0;bottom:0;z-index:0;background:rgba(0,0,0,.26);border-top:1.5px solid rgba(255,255,255,.35);transition:height .45s ease;pointer-events:none}
+.sg .sgfill{position:absolute;left:0;top:0;bottom:0;width:0;z-index:0;background:rgba(0,0,0,.24);transition:width .45s ease;pointer-events:none;border-radius:16px 0 0 16px}
 .sg .t,.sg .b{position:relative;z-index:1}
 .sg .sgp,.sg .mini{z-index:1}
 .sg .mini{position:absolute;top:8px;right:10px;font-size:11px;opacity:.85}
@@ -916,7 +916,7 @@ function sgCard(s,c){
     '<div class="b"><span>'+(ty==="count"?"⭐":ty==="decrease"?"↘":ty==="bool"?(cur>=1?"✅":"⬜"):"")+'</span>'+
     '<span class="cnt">'+sgDisplay(s)+'</span>'+
     (driven?'<span class="sgauto">🔗 任务自动</span>':'<button class="plus" data-bump="'+s.id+'">'+(ty==="bool"&&cur>=1?"↺":"＋")+'</button>')+'</div>'+
-    '<span class="sgfill" style="height:'+sgProg(s).toFixed(1)+'%"></span></div>';
+    '<span class="sgfill" style="width:'+sgProg(s).toFixed(1)+'%"></span></div>';
 }
 
 /* ---------- 目标库 ---------- */
