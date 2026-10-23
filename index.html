@@ -947,7 +947,7 @@ function viewGoalDetail(gid){
   '<div class="card"><div class="date" style="font-size:13px;color:var(--muted)">📅 '+(g.start||"未计划")+(g.end?" - "+g.end:"")+' · '+goalStatus(g)+' <span class="chip '+pace.cls+'">'+pace.label+'</span></div>'+  '<div class="prow mt8"><div class="pbar" style="height:8px"><i style="width:'+p+'%"></i></div><span class="pct" style="font-weight:800;color:var(--ink)">'+p.toFixed(1)+'%</span>'+
   '<span style="margin-left:auto">'+sparkline(trend)+'</span></div></div>'+
   '<div class="sect">拆分目标 <button class="btn small" style="margin-left:auto" data-act="new-sub" data-id="'+gid+'">＋ 添加</button></div>'+
-  (ss.length?'<div class="sg-grid">'+ss.map(sgCard).join("")+'</div>':'<div class="card"><div class="empty small">还没有拆分目标</div></div>')+
+  (ss.length?'<div class="sg-grid">'+ss.map(x=>sgCard(x)).join("")+'</div>':'<div class="card"><div class="empty small">还没有拆分目标</div></div>')+
   '<div class="sect">复盘记录 <button class="btn small primary" style="margin-left:auto" data-act="new-record" data-id="'+gid+'">✍️ 写复盘</button></div>'+
   (recs.length?recs.slice(0,8).map(r=>{const cf=CONF2[r.confidence]||CONF2.mid;
     return '<div class="tl-item"><div class="tl-date">'+r.date.slice(5).replace("-","/")+'<br><span style="color:var(--purple-ink)">'+Math.round(r.progressAt||0)+'%</span><br>'+cf.label+'</div>'+
