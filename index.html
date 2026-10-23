@@ -1055,12 +1055,12 @@ function taskRow(t,dayCtx,mode){
   if(done&&t.timeStart)meta.push(t.timeStart+(t.timeEnd?" - "+t.timeEnd:""));
   else if(t.time)meta.push(t.time);
   const repTag=cyc?'<span class="rep">🔁 '+REPEATS[t.cycle]+(q>1?' · '+mk+'/'+q:'')+'</span>':'';
-  /* ✓ 只代表"本期完成"；今日已打卡但未满额 → 圆圈显示当前次数+浅底 */
-  const cbInner=done?"✓":(cyc&&mk>0?'<span style="font-size:11px;font-weight:800">'+mk+'</span>':'');
+  /* 圆圈=这一天的状态：当天打过→描边✓（目标色，非白色）；本期满额→实心✓；周进度由 🔁 x/y 徽章表达 */
+  const cbInner=done||dayDone?"✓":"";
   let cbStyle="";
   if(c)cbStyle+="border-color:"+c+";";
   if(done)cbStyle+="background:"+(c||"var(--purple)")+";color:#fff;";
-  else if(dayDone)cbStyle+="background:color-mix(in srgb,"+(c||"var(--purple)")+" 18%,var(--card));color:"+(c||"var(--purple)")+";font-weight:800;";
+  else if(dayDone)cbStyle+="background:color-mix(in srgb,"+(c||"var(--purple)")+" 14%,var(--card));color:"+(c||"var(--purple)")+";";
   const cbHtml=nomark
     ?'<span class="cb" style="opacity:.4;'+cbStyle+'">'+cbInner+'</span>'
     :'<button class="cb" data-toggle="'+t.id+'"'+(cbStyle?' style="'+cbStyle+'"':'')+'>'+cbInner+'</button>';
