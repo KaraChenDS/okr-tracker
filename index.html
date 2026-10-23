@@ -85,12 +85,16 @@ a{color:var(--accent)}
 .pbar.time>i{background:linear-gradient(90deg,#b9bec9,#8d93ab)}
 .prow{display:flex;align-items:center;gap:10px}
 .pct{font-size:13px;color:var(--muted);min-width:34px;text-align:right}
+.lab{width:56px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;flex:none}
+.lab::before{content:"";width:8px;height:8px;border-radius:2.5px;background:#9aa0b4;flex:none}
+.lab.okr{color:var(--purple-ink);font-weight:700}
+.lab.okr::before{background:linear-gradient(135deg,var(--purple),var(--purple-ink))}
 .chev{width:30px;height:30px;border-radius:9px;background:var(--chipbg);display:grid;place-items:center;font-size:13px;color:var(--accent)}
 .riskrow{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line);cursor:pointer}
 .riskrow:last-child{border:none}
 .sg-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
 @media(max-width:430px){.sg-grid{grid-template-columns:1fr}}
-.sg{background:linear-gradient(160deg,var(--purple),var(--purple2));border-radius:16px;padding:14px;color:#fff;min-height:118px;
+.sg{background:linear-gradient(160deg,var(--purple),var(--purple2));border-radius:16px;padding:14px;color:#fff;min-height:118px;overflow:hidden;
   display:flex;flex-direction:column;cursor:pointer;box-shadow:var(--shadow);position:relative}
 .sg .t{font-size:15px;font-weight:700;line-height:1.35;flex:1;margin-top:14px}
 .sg .b{display:flex;align-items:center;gap:6px;margin-top:10px}
@@ -116,8 +120,9 @@ a{color:var(--accent)}
 }
 .ckrow{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;font-weight:700;cursor:pointer}
 .ckrow input[type=checkbox]{width:19px;height:19px;accent-color:var(--purple);flex:none}
-.sg .mp{height:4px;border-radius:99px;background:rgba(255,255,255,.3);margin-top:9px;overflow:hidden}
-.sg .mp>i{display:block;height:100%;border-radius:99px;background:#fff;transition:width .35s}
+.sg .sgfill{position:absolute;left:0;right:0;bottom:0;z-index:0;background:rgba(0,0,0,.26);border-top:1.5px solid rgba(255,255,255,.35);transition:height .45s ease;pointer-events:none}
+.sg .t,.sg .b{position:relative;z-index:1}
+.sg .sgp,.sg .mini{z-index:1}
 .sg .mini{position:absolute;top:8px;right:10px;font-size:11px;opacity:.85}
 .sg .sgp{position:absolute;top:8px;left:12px;font-size:10.5px;background:rgba(0,0,0,.18);border-radius:6px;padding:1px 6px}
 .goal-card .gc-head{cursor:pointer}
@@ -183,7 +188,9 @@ a{color:var(--accent)}
 .color-legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:10px;font-size:11px;color:var(--muted)}
 .color-legend .lg-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:0}
 .streak{display:inline-flex;align-items:center;gap:4px;background:var(--warnbg);color:var(--warn);border-radius:99px;padding:2px 9px;font-size:11.5px;font-weight:800}
-.motto{font-size:14.5px;font-style:italic;line-height:1.6;cursor:pointer;background:linear-gradient(135deg,color-mix(in srgb,var(--purple) 9%,var(--card)),var(--card))}
+.motto{font-size:15px;font-style:italic;font-weight:600;line-height:1.7;cursor:pointer;color:var(--ink);
+  background:linear-gradient(135deg,color-mix(in srgb,var(--purple) 11%,var(--card)),var(--card) 60%);border-left:3px solid var(--purple)}
+.motto .qm{color:var(--purple);font-size:21px;font-weight:800;font-style:normal;margin:0 5px;vertical-align:-3px}
 .iconbtn{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:var(--muted)}
 .iconbtn:active{background:var(--chipbg)}
 .motto .muted{font-style:normal;font-size:13px}
@@ -826,7 +833,7 @@ function viewSum(){
     '<div class="stat"><div class="n"><span class="em">⏱</span>'+ongoing.length+'</div><div class="l">进行中目标</div></div>'+
     '<div class="stat"><div class="n"><span class="em" style="color:var(--accent)">🗂</span>'+todayTasks+'</div><div class="l">今日任务</div></div>'+
   '</div>'+
-  '<div class="card motto" data-act="motto">'+(S.motto&&S.motto.text?'❝ '+esc(S.motto.text):'<span class="muted">＋ 写一句最近的宣言，贴在摘要顶部</span>')+'</div>'+
+  '<div class="card motto" data-act="motto">'+(S.motto&&S.motto.text?'<span class="qm">❝</span>'+esc(S.motto.text)+'<span class="qm">❞</span>':'<span class="muted">＋ 写一句最近的宣言，贴在摘要顶部</span>')+'</div>'+
   quarterCard()+weekStripCard()+dashCard()+
   '<div class="goal-grid">'+Object.values(S.goals).filter(g=>!g.deleted&&!g.archived)
     .sort((a,b)=>(goalStatus(a)==="进行中"?-1:1)-(goalStatus(b)==="进行中"?-1:1))
@@ -844,16 +851,16 @@ function quarterCard(){
   const risky=gs.map(g=>({g,p:goalPace(g),st:recordStale(g)})).filter(x=>x.p.cls==="bad"||x.p.cls==="warn"||x.st);
   return '<div class="card"><div class="qcard">'+segRing(gs,78)+
     '<div class="qmeta"><div class="row"><b style="font-size:15px">'+q.label+'</b><span class="chip '+pace.cls+'">'+pace.label+'</span>'+
-    '<span class="small muted" style="margin-left:auto">剩 '+Math.max(0,dayDiff(new Date(),pdate(q.end)))+' 天</span></div>'+
-    '<div class="prow mt8"><span class="small muted" style="width:52px">时间</span><div class="pbar time"><i style="width:'+tp+'%"></i></div><span class="pct">'+Math.round(tp)+'%</span></div>'+
-    '<div class="prow mt8"><span class="small muted" style="width:52px">OKR</span><div class="pbar"><i style="width:'+overall+'%"></i></div><span class="pct" style="color:var(--purple-ink);font-weight:800">'+Math.round(overall)+'%</span></div>'+
+    '<span class="chip" style="margin-left:auto">剩 '+Math.max(0,dayDiff(new Date(),pdate(q.end)))+' 天</span></div>'+
+    '<div class="prow mt8"><span class="lab">时间</span><div class="pbar time"><i style="width:'+tp+'%"></i></div><span class="pct">'+Math.round(tp)+'%</span></div>'+
+    '<div class="prow mt8"><span class="lab okr">OKR</span><div class="pbar"><i style="width:'+overall+'%"></i></div><span class="pct" style="color:var(--purple-ink);font-weight:800">'+Math.round(overall)+'%</span></div>'+
     '<div class="small muted mt8">本周复盘 '+checked+'/'+gs.length+(checked<gs.length&&tp>15?" · 有目标没回顾":" ✓ 节奏健康")+'</div>'+
     '</div></div>'+
     (risky.length?'<div style="border-top:1px dashed var(--line);margin-top:12px;padding-top:4px"><div class="small bold" style="color:var(--warn);padding:4px 0">⚠ 需要关注</div>'+
       risky.map(x=>{const lc=lastRecord(x.g.id);
-        return '<div class="riskrow" data-open-goal="'+x.g.id+'"><b style="width:8px;height:8px;border-radius:50%;background:var(--purple);flex:none"></b>'+
+        return '<div class="riskrow" data-open-goal="'+x.g.id+'">'+emojiRing(x.g,30)+
         '<div style="flex:1;min-width:0"><div class="small bold">'+esc(x.g.title)+'</div>'+
-        '<div class="small muted">'+Math.round(goalProg(x.g.id))+'% · 上次复盘 '+(lc?lc.date.slice(5):"从未")+(x.st&&lc?"（超8天）":x.st?"（从未复盘）":"")+'</div></div>'+
+        '<div class="small muted">'+Math.round(goalProg(x.g.id))+'% · '+(lc?"复盘于 "+lc.date.slice(5).replace("-","/")+(x.st?"（超8天）":""):"从未复盘")+'</div></div>'+
         '<span class="chip '+x.p.cls+'">'+x.p.label+'</span></div>';}).join("")+'</div>':"")+
   '</div>';
 }
@@ -909,7 +916,7 @@ function sgCard(s,c){
     '<div class="b"><span>'+(ty==="count"?"⭐":ty==="decrease"?"↘":ty==="bool"?(cur>=1?"✅":"⬜"):"")+'</span>'+
     '<span class="cnt">'+sgDisplay(s)+'</span>'+
     (driven?'<span class="sgauto">🔗 任务自动</span>':'<button class="plus" data-bump="'+s.id+'">'+(ty==="bool"&&cur>=1?"↺":"＋")+'</button>')+'</div>'+
-    '<div class="mp"><i style="width:'+sgProg(s)+'%"></i></div></div>';
+    '<span class="sgfill" style="height:'+sgProg(s).toFixed(1)+'%"></span></div>';
 }
 
 /* ---------- 目标库 ---------- */
