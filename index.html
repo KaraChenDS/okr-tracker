@@ -635,7 +635,7 @@ function mergeState(local,remote){const before=stableStr(local);
   const cnt=st=>COLL.reduce((a,k)=>a+Object.keys(st[k]||{}).length,0);
   return{merged,changed:stableStr(merged)!==before,added:cnt(merged)-cnt(local)};}
 function payload(){return{app:"visokr",v:2,exportedAt:new Date().toISOString(),state:S};}
-function payloadSig(src){const st=src.state||src;return stableStr(COLL.map(k=>st[k]||{}));}
+function payloadSig(src){const st=src.state||src;return stableStr(COLL.map(k=>st[k]||{}).concat([st.motto||{}]));}
 function netMsg(e){const m=String((e&&e.message)||e||"");
   if(/load failed|failed to fetch|networkerror|network request failed|err_/i.test(m))
     return"连不上 api.github.com —— 网络被限制或需要代理，不是令牌问题";
@@ -1375,14 +1375,22 @@ function timeLogForm(tid){const t=S.tasks[tid];if(!t)return;
     if(s&&e&&e<=s){toast("结束需晚于开始");return;}
     t.timeStart=s;t.timeEnd=e;t.updatedAt=now();save();closeModal();toast("已记录用时");};}
 /* 摘要宣言 */
+function mottoHist(){try{return JSON.parse(localStorage.getItem("okr_motto_hist")||"[]");}catch(e){return[];}}
+function mottoPush(old){if(!old||!old.text)return;const h=mottoHist().filter(x=>x.text!==old.text);h.push(old);
+  while(h.length>5)h.shift();try{localStorage.setItem("okr_motto_hist",JSON.stringify(h));}catch(e){}}
 function mottoForm(){
+  const hist=mottoHist();
   openModal('<h3>我的宣言<button class="x" data-act="close">✕</button></h3>'+
     '<div class="small muted">贴在摘要顶部的一句话，提醒自己为什么出发</div>'+
     '<label class="f">内容</label><textarea id="mt-text" placeholder="例：最近的生活太疲惫了！我要把节奏拿回来。">'+esc((S.motto&&S.motto.text)||"")+'</textarea>'+
+    (hist.length?'<div class="small muted mt8">最近用过：</div><div class="tsegs mt8" id="mt-hist">'+hist.slice(-3).reverse().map((x,i)=>'<button data-mh="'+(hist.length-1-i)+'">'+esc(x.text.length>12?x.text.slice(0,12)+"…":x.text)+'</button>').join("")+'</div>':"")+
     '<div class="row mt12"><button class="btn danger" id="mt-clear">清除</button><button class="btn" data-act="close" style="flex:1">取消</button><button class="btn primary" id="mt-save" style="flex:1.5">保存</button></div>');
+  const histBox=$("#mt-hist");
+  if(histBox)histBox.onclick=e=>{const b=e.target.closest("[data-mh]");if(!b)return;$("#mt-text").value=mottoHist()[Number(b.getAttribute("data-mh"))].text;};
   $("#mt-save").onclick=()=>{const text=$("#mt-text").value.trim();if(!text){toast("写点什么吧");return;}
-    S.motto={text,updatedAt:now()};save();closeModal();toast("宣言已更新");};
-  $("#mt-clear").onclick=()=>{S.motto={text:"",updatedAt:now()};save();closeModal();toast("已清除");};}
+    mottoPush(S.motto);S.motto={text,updatedAt:now()};save();closeModal();toast("宣言已更新");};
+  $("#mt-clear").onclick=()=>{if(!S.motto||!S.motto.text){closeModal();return;}
+    confirmModal("清除当前宣言？（会同步到你的所有设备，可在编辑框「最近用过」找回）",()=>{mottoPush(S.motto);S.motto={text:"",updatedAt:now()};save();closeModal();toast("已清除，可在「最近用过」找回");});};}
 function bumpSub(id){const s=S.subgoals[id];if(!s)return;
   if(sgDriven(s)){toast("🔗 该拆分目标由关联任务自动计算，去任务列表打卡");return;}
   advanceSub(s,1,sgType(s)==="bool"&&Number(s.current)>=1?-1:1);save();}
