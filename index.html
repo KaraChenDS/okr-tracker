@@ -606,9 +606,13 @@ function seedDemo(){
   st.subgoals[sid2]={id:sid2,goalId:gid2,title:"每周力量训练≥3次，坚持12周",type:"count",auto:true,current:0,target:12,createdAt:now(),updatedAt:now(),deleted:false};
   const tid2=uid();
   st.tasks[tid2]={id:tid2,title:"力量训练",cycle:"weekly",cycleStart:dstr(),quota:3,metric:"count",inc:1,goalId:gid2,subgoalId:sid2,marks:[],note:"练腿/硬拉/卧推任选三",done:false,createdAt:now(),updatedAt:now(),deleted:false};
+  /* 示例实体统一打 seed 标记：合并时若存在真实数据即被丢弃，防止污染云端 */
+  ["goals","subgoals","tasks","records"].forEach(k=>Object.values(st[k]).forEach(x=>{x.seed=1;}));
   return st;
 }
 function isEmpty(){return !Object.values(S.goals).some(g=>!g.deleted);}
+function maybeSeedDemo(){if(isEmpty()&&UI.seeded===undefined&&!syncCfg().token){
+  S=seedDemo();UI.seeded=true;saveUI();try{localStorage.setItem(LS_STATE,JSON.stringify(S));}catch(e){}}}
 
 /* =============================================================
    同步层（已验证实现，未改动语义）
@@ -630,9 +634,18 @@ function mergeColl(a,b){const A=a||{},B=b||{},out={};
   for(const id in A)out[id]=A[id];
   for(const id in B){const x=out[id],y=B[id];if(!x||(y.updatedAt||0)>(x.updatedAt||0))out[id]=y;}
   return out;}
+function dupGoalCount(st){const seen={};Object.values((st&&st.goals)||{}).forEach(g=>{if(g.deleted)return;
+  seen[g.title]=(seen[g.title]||0)+1;});return Object.values(seen).filter(n=>n>1).length;}
+function hasRealGoals(st){return Object.values((st&&st.goals)||{}).some(g=>!g.deleted);}
 function mergeState(local,remote){const before=stableStr(local);
   const merged={v:2,meta:{updatedAt:now()}};
   COLL.forEach(k=>merged[k]=mergeColl(local[k],remote[k]));
+  /* seed 防护：结果中存在任何真实目标 → 丢弃带 seed 标记的示例实体及其级联 */
+  if(Object.values(merged.goals).some(g=>!g.seed)){
+    const seedGoalIds=new Set(Object.keys(merged.goals).filter(k=>merged.goals[k].seed));
+    Object.keys(merged.goals).forEach(k=>{if(merged.goals[k].seed)delete merged.goals[k];});
+    ["subgoals","tasks","records"].forEach(c=>Object.keys(merged[c]).forEach(id=>{const x=merged[c][id];
+      if(x.seed||(x.goalId&&seedGoalIds.has(x.goalId)))delete merged[c][id];}));}
   const lm=local.motto||{},rm=remote.motto||{};
   merged.motto=(rm.updatedAt||0)>(lm.updatedAt||0)?(rm.updatedAt?rm:{}):(lm.updatedAt?lm:{});
   const cnt=st=>COLL.reduce((a,k)=>a+Object.keys(st[k]||{}).length,0);
@@ -647,7 +660,7 @@ function statusHint(r){if(r.status===401)return"令牌无效或已被吊销（40
   if(r.status===403)return"令牌权限不足或被限流（403）：需对数据仓库 Contents 读写";
   if(r.status===404)return null;return"GitHub 返回 "+r.status;}
 let syncing=false;
-async function syncPull(silent){const c=syncCfg();
+async function syncPull(silent,replace){const c=syncCfg();
   if(!c.token){if(!silent)toast("尚未配置同步令牌");return false;}
   if(syncing)return false;syncing=true;renderSyncDot("ing");
   try{
@@ -655,9 +668,16 @@ async function syncPull(silent){const c=syncCfg();
     if(r.status===404){logSync("info","云端尚无数据，正在创建");return await syncPush(silent);}
     if(!r.ok){const msg=statusHint(r)||("拉取失败 "+r.status);logSync("error",msg);if(!silent)toast(msg,3600);renderSyncDot("error");return false;}
     const j=await r.json();const remote=JSON.parse(b64dec(j.content||""));
-    const{merged,changed,added}=mergeState(S,remote.state||remote);
+    const rs=remote.state||remote;
+    if(replace||(dupGoalCount(S)>0&&dupGoalCount(rs)===0&&hasRealGoals(rs))){
+      S=rs;try{localStorage.setItem(LS_STATE,JSON.stringify(S));}catch(e){}
+      logSync("pull",replace?"replace-manual":"replace-dupes");
+      if(!silent)toast(replace?"已用云端数据覆盖本机":"检测到本机数据异常（重复目标），已用云端恢复");
+      render();renderSyncDot("ok");return true;}
+    const{merged,changed,added}=mergeState(S,rs);
     if(changed){S=merged;try{localStorage.setItem(LS_STATE,JSON.stringify(S));}catch(e){}
       if(added!==0&&!silent)toast(added>0?("已合并云端 "+added+" 条更新"):"云端删除已生效");render();}
+    maybeSeedDemo();
     logSync("pull","ok");
     if(payloadSig({state:S})!==payloadSig(remote))return await syncPush(silent);
     renderSyncDot("ok");return true;
@@ -1129,6 +1149,7 @@ function viewSyncPage(){
     '<div class="row mt12" style="flex-wrap:wrap">'+
       '<button class="btn primary" data-act="save-sync">💾 保存并测试</button>'+
       '<button class="btn" data-act="pull">↓ 拉取</button><button class="btn" data-act="push">↑ 推送</button>'+
+      '<button class="btn danger" data-act="pull-replace">⚠ 用云端覆盖本机（数据异常修复）</button>'+
       '<button class="btn" data-act="diagnose">🩺 诊断</button></div>'+
     (L.error&&(!L.pull||L.error.at>=(L.pull.at||0))?'<div class="small mt8" style="color:var(--red)">异常：'+esc(L.error.msg)+' · '+ago(L.error.at)+'</div>':"")+
     '<div id="diag" class="mt8 small" style="white-space:pre-wrap;display:none;background:var(--card2);padding:10px;border-radius:10px;border:1px dashed var(--line)"></div>'+
@@ -1540,6 +1561,7 @@ document.body.addEventListener("click",e=>{
     case"theme":UI.dark=!UI.dark;applyTheme();saveUI();render();break;
     case"save-sync":saveSyncFromForm();break;
     case"pull":syncPull(false);break;
+    case"pull-replace":confirmModal("丢弃本机全部数据，改用云端版本？本机尚未上传的改动会丢失。",()=>{syncPull(false,true);});break;
     case"push":syncPush(false);break;
     case"diagnose":diagnose();break;
     case"copy-link":copyLink();break;
@@ -1623,8 +1645,7 @@ function importJSON(){const inp=document.createElement("input");inp.type="file";
 $("#fab").onclick=()=>{UI.pickToday=UI.taskMode==="cal"?(UI.pick||dstr()):dstr();taskForm();};
 function applyTheme(){document.documentElement.setAttribute("data-theme",UI.dark?"dark":"light");}
 (function(){if(UI.dark===undefined)UI.dark=matchMedia("(prefers-color-scheme: dark)").matches;applyTheme();})();
-if(isEmpty()&&UI.seeded===undefined){S=seedDemo();UI.seeded=true;saveUI();
-  try{localStorage.setItem(LS_STATE,JSON.stringify(S));}catch(e){}}
+maybeSeedDemo();
 /* 迁移：为无颜色的历史目标补色（一次性，不触发推送） */
 (function(){let ch=false;Object.values(S.goals).forEach((g,i)=>{if(!g.deleted&&!g.color){g.color=OBJ_COLORS[i%OBJ_COLORS.length];g.updatedAt=now();ch=true;}});
   /* 旧重复任务(打勾生成制) → 周期配额模型 */
