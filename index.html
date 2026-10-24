@@ -685,9 +685,14 @@ async function syncPull(silent,replace){const c=syncCfg();
   finally{syncing=false;}}
 async function syncPush(silent){const c=syncCfg();if(!c.token)return false;renderSyncDot("ing");
   try{
-    let sha=null;
+    let sha=null,remoteState=null;
     const g=await fetch(syncUrl(),{headers:syHeaders(c.token)});
-    if(g.ok){sha=(await g.json()).sha;}
+    if(g.ok){const cj=await g.json();sha=cj.sha;
+      try{remoteState=(JSON.parse(b64dec(cj.content))||{}).state||null;}catch(e){}}
+    /* 推送保险：本机有重复目标而云端没有 → 放弃推送改用云端（防污染回流） */
+    if(remoteState&&dupGoalCount(S)>0&&dupGoalCount(remoteState)===0&&hasRealGoals(remoteState)){
+      S=remoteState;try{localStorage.setItem(LS_STATE,JSON.stringify(S));}catch(e){}
+      logSync("push","blocked-dupes");render();toast("检测到本机重复数据，已改用云端版本");renderSyncDot("ok");return false;}
     else if(g.status!==404){const msg=statusHint(g)||("读取远端失败 "+g.status);logSync("error",msg);renderSyncDot("error");return false;}
     const body={message:"sync "+new Date().toISOString(),content:b64enc(JSON.stringify(payload()))};
     if(sha)body.sha=sha;
