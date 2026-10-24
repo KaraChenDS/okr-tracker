@@ -229,6 +229,9 @@ a{color:var(--accent)}
 .task.mini{padding:9px 14px;opacity:.72;margin-bottom:8px}
 .task.mini .tt{font-size:14px;color:var(--muted)}
 .cb.ghost{border-color:var(--line);background:transparent}
+.cbring-wrap{position:relative;width:34px;height:34px;flex:none;display:inline-grid;place-items:center}
+.cbring-wrap .cb{margin-top:0}
+.cbring{position:absolute;inset:0;pointer-events:none}
 
 /* ============ 我的 ============ */
 .vip{background:linear-gradient(120deg,#17181d,#2b2d3a);border-radius:22px;color:#fff;padding:20px;margin-bottom:16px;position:relative;overflow:hidden;box-shadow:var(--shadow)}
@@ -1050,20 +1053,22 @@ function taskRow(t,dayCtx,mode){
     '</div>';
   }
   const meta=[];const overdue=!cyc&&t.due&&t.due<dstr()&&!done;
-  if(cyc){meta.push(REPEATS[t.cycle]+"任务·每日一次");meta.push("窗口 "+t.cycleStart.slice(5).replace("-","/")+" ~ "+cycEnd(t.cycleStart,t.cycle).slice(5).replace("-","/")+"（含前）");if(met)meta.push("本期已满 ✓");else if(dayDone)meta.push("今日已打卡 ✓");}
+  if(cyc){meta.push(REPEATS[t.cycle]+"任务·每日一次");meta.push("窗口 "+t.cycleStart.slice(5).replace("-","/")+" ~ "+cycEnd(t.cycleStart,t.cycle).slice(5).replace("-","/")+"（含前）");if(met)meta.push("本期已满 ✓");else if(dayDone)meta.push(ds===dstr()?"今日已打卡 ✓":"该日已打卡 ✓");}
   else if(t.due){meta.push(WD[pdate(t.due).getDay()]);meta.push(relDay(t.due));}
   if(done&&t.timeStart)meta.push(t.timeStart+(t.timeEnd?" - "+t.timeEnd:""));
   else if(t.time)meta.push(t.time);
   const repTag=cyc?'<span class="rep">🔁 '+REPEATS[t.cycle]+(q>1?' · '+mk+'/'+q:'')+'</span>':'';
   /* 圆圈=这一天的状态：当天打过→描边✓（目标色，非白色）；本期满额→实心✓；周进度由 🔁 x/y 徽章表达 */
   const cbInner=done||dayDone?"✓":"";
+  const ringPct=cyc&&q>1?clamp(mk/q*100,0,100):-1;
+  const cbWrap=(html)=>ringPct<0?html:'<span class="cbring-wrap"><svg class="cbring" width="34" height="34" viewBox="0 0 34 34" data-ring="'+ringPct.toFixed(0)+'" style="transform:rotate(-90deg)"><circle cx="17" cy="17" r="15" fill="none" stroke="var(--chipbg)" stroke-width="3"/><circle cx="17" cy="17" r="15" fill="none" style="stroke:'+(c||"var(--purple)")+'" stroke-width="3" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*15*ringPct/100).toFixed(1)+' '+(2*Math.PI*15).toFixed(1)+'"/></svg>'+html+'</span>';
   let cbStyle="";
   if(c)cbStyle+="border-color:"+c+";";
   if(done)cbStyle+="background:"+(c||"var(--purple)")+";color:#fff;";
   else if(dayDone)cbStyle+="background:color-mix(in srgb,"+(c||"var(--purple)")+" 14%,var(--card));color:"+(c||"var(--purple)")+";";
-  const cbHtml=nomark
+  const cbHtml=cbWrap(nomark
     ?'<span class="cb" style="opacity:.4;'+cbStyle+'">'+cbInner+'</span>'
-    :'<button class="cb" data-toggle="'+t.id+'"'+(cbStyle?' style="'+cbStyle+'"':'')+'>'+cbInner+'</button>';
+    :'<button class="cb" data-toggle="'+t.id+'"'+(cbStyle?' style="'+cbStyle+'"':'')+'>'+cbInner+'</button>');
   return '<div class="task '+(done?"done":"")+(dayDone&&!met?" todaydone":"")+'" data-task-open="'+t.id+'"'+(c&&!done?' style="background:color-mix(in srgb,'+c+' 9%,var(--card))"':'')+'>'+
     cbHtml+
     '<div class="bd"><div class="tt"'+(c&&!done?' style="color:'+c+'"':'')+'>'+esc(t.title)+repTag+'</div>'+
